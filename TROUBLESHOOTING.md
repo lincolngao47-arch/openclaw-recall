@@ -24,7 +24,7 @@ openclaw plugins install --link /path/to/openclaw-memory-plugin
 If you are testing a release tarball instead of a source checkout:
 
 ```bash
-npm install ./openclaw-memory-plugin-0.2.0.tgz
+npm install ./openclaw-memory-plugin-<version>.tgz
 openclaw plugins install --link ./node_modules/openclaw-memory-plugin
 ```
 
@@ -80,6 +80,15 @@ Fix one of:
 
 - switch back to `OPENCLAW_MEMORY_PLUGIN_EMBEDDING_PROVIDER=local`
 - or provide `OPENCLAW_MEMORY_PLUGIN_EMBEDDING_API_KEY`
+
+## Why do some savings fields still say `estimated`?
+
+Cause:
+
+- prompt token counts can be exact when provider usage is returned
+- savings values still come from heuristic before/after comparisons
+
+This is expected in the beta.
 
 ## SQLite appears locked
 

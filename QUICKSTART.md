@@ -4,6 +4,8 @@
 
 Get the plugin installed, enabled, and verified with the fewest moving parts.
 
+This document tracks the beta release path for `0.3.0-beta.1`.
+
 ## Prerequisites
 
 - Node.js 24+

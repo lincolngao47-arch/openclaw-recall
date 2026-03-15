@@ -1,8 +1,15 @@
 # Release Notes
 
-## v0.2.0
+## v0.3.0-beta.1
 
-Initial release candidate for `openclaw-memory-plugin`.
+First beta release of `openclaw-memory-plugin`.
+
+### Why this is a beta
+
+- the core plugin workflow is implemented and verified end-to-end
+- source install, tarball install, and OpenClaw load flows are working
+- operator CLI, inspect surface, doctor, and status are usable
+- some metrics and provider paths still have beta-level limitations, so this is not presented as a stable `0.3.0` yet
 
 ### What it solves
 
@@ -33,6 +40,8 @@ Initial release candidate for `openclaw-memory-plugin`.
 - prompt token counts can be `exact` when provider usage is available, but compression and tool savings are still `estimated`
 - OpenClaw plugin metadata can advertise CLI commands, but the supported operator surface remains the standalone `openclaw-memory-plugin` binary
 - OpenAI-compatible embeddings are supported but not covered by the automated smoke path in this release
+- some OpenClaw install/info flows may emit `plugins.allow is empty` warning noise before config is tightened
+- conflict resolution remains rule-based in this beta
 
 ### Install
 
@@ -49,3 +58,10 @@ For a release-grade validation path:
 ```bash
 npm run verify
 ```
+
+### Highlights
+
+- automatic memory write with cross-session recall
+- layered prompt assembly with compression and budget control
+- tool output compaction with inspectable savings
+- operator CLI and inspect routes for debugging and operations

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0-beta.1
+
+- cut the first beta release line for the plugin
+- added publish-facing compatibility documentation
+- clarified beta limitations around estimated savings fields, provider coverage, and upstream warning noise
+- verified full release chain again: build, unit, integration, smoke, verify, tarball sanity, and tarball install
+- prepared GitHub beta release materials and beta versioning
+
 ## 0.2.0
 
 - added installable OpenClaw plugin entry with hook-based memory/compression/profile integration

@@ -2,7 +2,7 @@
   "id": "openclaw-memory-plugin",
   "name": "OpenClaw Memory Plugin",
   "description": "Automatic memory, context compression, tool output compaction, and prompt profiling for OpenClaw.",
-  "version": "0.2.0",
+  "version": "0.3.0-beta.1",
   "uiHints": {
     "embedding.provider": {
       "label": "Embedding Provider",

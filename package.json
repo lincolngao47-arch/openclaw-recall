@@ -1,6 +1,6 @@
 {
   "name": "openclaw-memory-plugin",
-  "version": "0.2.0",
+  "version": "0.3.0-beta.1",
   "description": "Production-grade OpenClaw enhancement plugin for persistent memory, context compression, and inspectable profiling.",
   "type": "module",
   "main": "dist/src/plugin/index.js",
@@ -33,6 +33,7 @@
     "QUICKSTART.md",
     "ARCHITECTURE.md",
     "EXAMPLES.md",
+    "COMPATIBILITY.md",
     "OPENCLAW-INTEGRATION.md",
     "OPERATIONS.md",
     "TROUBLESHOOTING.md",

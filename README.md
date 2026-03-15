@@ -4,6 +4,8 @@ Production-grade enhancement plugin for OpenClaw that adds persistent memory, to
 
 This repository is not an OpenClaw replacement product. It extends OpenClaw's existing runtime and product surface through plugin hooks.
 
+Current release channel: `0.3.0-beta.1`
+
 ## Why install it
 
 OpenClaw already has a mature runtime. This plugin strengthens the parts that most directly affect long-running agent quality:
@@ -20,6 +22,15 @@ In practical terms, after installing this plugin you get:
 - lower prompt waste from old transcript and tool payloads
 - better task continuity
 - concrete profiling data for retrieval and compression behavior
+
+## Beta status
+
+This is a beta-quality plugin release:
+
+- core memory, retrieval, compression, compaction, and profiling flows are implemented
+- source install, tarball install, and OpenClaw load flows are verified
+- operator CLI and inspect routes are usable for real debugging
+- some metrics are still partially estimated, and provider coverage is not uniform yet
 
 ## What it adds
 
@@ -189,6 +200,7 @@ Configuration precedence:
 See:
 
 - [OPENCLAW-INTEGRATION.md](/Users/felix/Documents/openclaw-memory-plugin/OPENCLAW-INTEGRATION.md)
+- [COMPATIBILITY.md](/Users/felix/Documents/openclaw-memory-plugin/COMPATIBILITY.md)
 - [ARCHITECTURE.md](/Users/felix/Documents/openclaw-memory-plugin/ARCHITECTURE.md)
 - [OPERATIONS.md](/Users/felix/Documents/openclaw-memory-plugin/OPERATIONS.md)
 - [TROUBLESHOOTING.md](/Users/felix/Documents/openclaw-memory-plugin/TROUBLESHOOTING.md)
@@ -223,7 +235,7 @@ The package exports:
 
 ## Compatibility
 
-Verified in this release-hardening pass:
+Verified in this beta:
 
 - Node.js `24.12.0`
 - OpenClaw npm package `2026.3.13`
@@ -234,6 +246,8 @@ Supported but not yet covered by automated smoke in this release:
 
 - OpenAI-compatible embedding endpoint via `embedding.provider=openai`
 
+Full matrix: [COMPATIBILITY.md](/Users/felix/Documents/openclaw-memory-plugin/COMPATIBILITY.md)
+
 ## Token accuracy
 
 The plugin now distinguishes metric quality explicitly:
@@ -243,6 +257,14 @@ The plugin now distinguishes metric quality explicitly:
 - `toolTokensSavedSource=estimated` and `compressionSavingsSource=estimated` when savings come from heuristic compression math
 
 The plugin does not pretend savings are exact when they are not.
+
+## Known limitations
+
+- `compressionSavings` and `toolTokensSaved` remain partially `estimated`
+- provider smoke coverage is strongest on the OpenAI Responses path
+- the stable operator surface is the standalone `openclaw-memory-plugin` binary, not `openclaw <plugin-subcommand>`
+- some OpenClaw install/info flows may print `plugins.allow is empty` warning noise before config is tightened
+- conflict resolution is still rule-based rather than model-assisted
 
 ## Attribution
 
@@ -257,7 +279,7 @@ Relevant docs:
 
 ## Short roadmap
 
-The current plugin is installable and release-ready. The next highest-value upgrades are:
+The current plugin is in beta and ready for wider installation testing. The next highest-value upgrades are:
 
 - broader tokenizer-exact budgeting beyond provider-reported prompt usage
 - stronger semantic conflict resolution

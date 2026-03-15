@@ -12,7 +12,7 @@ const program = new Command();
 program
   .name("openclaw-memory-plugin")
   .description("Inspect and operate the OpenClaw Memory Plugin")
-  .version("0.2.0");
+  .version("0.3.0-beta.1");
 
 registerStatusCommands(program);
 registerDoctorCommands(program);

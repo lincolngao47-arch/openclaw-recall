@@ -155,3 +155,5 @@ Verified in this repository:
 Supported but not smoke-tested in this release:
 
 - OpenAI-compatible embeddings via `embedding.provider=openai`
+
+See the fuller matrix in [COMPATIBILITY.md](/Users/felix/Documents/openclaw-memory-plugin/COMPATIBILITY.md).
