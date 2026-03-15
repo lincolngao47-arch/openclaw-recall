@@ -1,5 +1,6 @@
 import { cosineSimilarity } from "./EmbeddingProvider.js";
 import { tokenize } from "../shared/text.js";
+import { shouldSuppressMemory } from "../shared/safety.js";
 import { MemoryRecord } from "../types/domain.js";
 
 export class MemoryRanker {
@@ -8,6 +9,7 @@ export class MemoryRanker {
     const now = Date.now();
 
     return [...memories]
+      .filter((memory) => !shouldSuppressMemory(memory))
       .map((memory) => {
         const overlap = memory.topics.filter((topic) => queryTokens.has(topic)).length;
         const entityOverlap = memory.entityKeys.filter((entity) => queryTokens.has(entity.toLowerCase())).length;
@@ -17,11 +19,11 @@ export class MemoryRanker {
         const ttlFactor = memory.ttlDays ? Math.max(0.15, 1 - ageDays / memory.ttlDays) : 1;
         const typeBias =
           memory.kind === "preference"
-            ? 0.85
+            ? 1.1
             : memory.kind === "semantic"
-              ? 0.6
+              ? 0.75
               : memory.kind === "session_state"
-                ? 0.45
+                ? 0.5
                 : 0.18;
         const confidence = memory.confidence ?? 0.7;
         const importance = memory.importance ?? memory.salience;

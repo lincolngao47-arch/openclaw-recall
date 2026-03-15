@@ -1,5 +1,12 @@
 import crypto from "node:crypto";
 import { fingerprint, sentenceFromText, tokenize, uniqueStrings } from "../shared/text.js";
+import {
+  hasStablePreferenceSignal,
+  isLowValueEmotionalText,
+  isNoiseLikeText,
+  sanitizeIncomingUserText,
+  shouldRejectMemoryCandidate,
+} from "../shared/safety.js";
 import { ChatTurn, MemoryKind, MemoryRecord, SessionState } from "../types/domain.js";
 
 export interface ExtractionResult {
@@ -35,12 +42,20 @@ export class MemoryExtractor {
   constructor(private readonly policy: MemoryExtractorPolicy) {}
 
   extract(turn: ChatTurn): ExtractionResult {
-    const text = turn.text.trim();
+    const text = sanitizeIncomingUserText(turn.text);
+    if (!text || isNoiseLikeText(text) || isLowValueEmotionalText(text)) {
+      return {
+        memories: [],
+        statePatch: { constraints: [], decisions: [], openQuestions: [] },
+        candidateCount: 0,
+      };
+    }
     const topics = tokenize(text);
     const entityKeys = extractEntityKeys(text);
     const now = new Date().toISOString();
     const isQuestion = /[?？]/.test(text);
     const isRecallQuery = /记得|remember|memory|回忆|还记得/i.test(text);
+    const assistantPreferenceSummary = turn.role === "assistant" && hasStablePreferenceSignal(text);
     const candidates: CandidateSeed[] = [];
     const statePatch: ExtractionResult["statePatch"] = {
       constraints: [],
@@ -50,12 +65,14 @@ export class MemoryExtractor {
 
     if (!isQuestion && !isRecallQuery) {
       candidates.push(...extractPreferenceCandidates(text));
-      candidates.push(...extractSemanticCandidates(text));
-      candidates.push(...extractEpisodicCandidates(text));
+      if (turn.role !== "assistant") {
+        candidates.push(...extractSemanticCandidates(text));
+        candidates.push(...extractEpisodicCandidates(text));
+      }
     }
 
-    const taskMatch = text.match(/(?:当前任务|task|目标是|需要|need to|next step|下一步|pending|要做)(.+)/i);
-    if (taskMatch && !isQuestion) {
+    const taskMatch = text.match(/(?:当前任务[:：]?\s*|task[:：]?\s*|目标是[:：]?\s*|需要[:：]?\s*|need to[:：]?\s*|next step[:：]?\s*|下一步[:：]?\s*|pending[:：]?\s*|要做[:：]?\s*)(.+)/i);
+    if (turn.role !== "assistant" && taskMatch && !isQuestion && !hasStablePreferenceSignal(text)) {
       statePatch.currentTask = sentenceFromText(taskMatch[1]);
       candidates.push({
         kind: "session_state",
@@ -73,7 +90,7 @@ export class MemoryExtractor {
       });
     }
 
-    if (!isQuestion && /不要|不能|must not|must|constraint|约束/i.test(text)) {
+    if (turn.role !== "assistant" && !isQuestion && /不要|不能|must not|must|constraint|约束/i.test(text)) {
       const constraint = sentenceFromText(text);
       statePatch.constraints = uniqueStrings([constraint]);
       candidates.push({
@@ -92,7 +109,7 @@ export class MemoryExtractor {
       });
     }
 
-    if (!isQuestion && /决定|decide|will use|采用|选择|we should|我们要/i.test(text)) {
+    if (turn.role !== "assistant" && !isQuestion && /决定|decide|will use|采用|选择|we should|我们要/i.test(text)) {
       const decision = sentenceFromText(text);
       statePatch.decisions = uniqueStrings([decision]);
       candidates.push({
@@ -130,8 +147,15 @@ export class MemoryExtractor {
       });
     }
 
+    if (assistantPreferenceSummary && candidates.length === 0) {
+      candidates.push(
+        ...extractPreferenceCandidates(text),
+      );
+    }
+
     const memories = candidates
-      .map((candidate) => this.materializeCandidate(candidate, turn, topics, entityKeys, now))
+      .map((candidate) => this.materializeCandidate(candidate, { ...turn, text }, topics, entityKeys, now))
+      .filter((memory) => !shouldRejectMemoryCandidate(turn, memory))
       .filter((memory) => (memory.importance ?? 0) >= this.policy.writeThreshold)
       .filter(uniqueByFingerprint);
 
@@ -242,6 +266,21 @@ function extractPreferenceCandidates(text: string): CandidateSeed[] {
     {
       regex: /concise|简洁|直接|terminal-first/i,
       summary: () => "User prefers concise terminal-first answers.",
+      group: "preference:style",
+    },
+    {
+      regex: /直接给结果|执行导向|可执行|短.?准.?可执行/i,
+      summary: () => "User prefers direct, execution-oriented answers.",
+      group: "preference:style",
+    },
+    {
+      regex: /结构化输出|结构化汇报|结论.{0,8}进度.{0,8}风险.{0,8}下一步|已完成.{0,8}未完成.{0,8}下一步/i,
+      summary: () => "User prefers structured updates with conclusion, progress, risk, and next steps.",
+      group: "preference:format",
+    },
+    {
+      regex: /不喜欢空话|模板废话|别再.*空话/i,
+      summary: () => "User dislikes vague or filler-heavy answers.",
       group: "preference:style",
     },
   ];

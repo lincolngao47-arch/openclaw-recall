@@ -112,6 +112,37 @@ test("supersedes conflicting preference memories in the same group", async () =>
   }
 });
 
+test("prunes noisy memories that were previously stored", async () => {
+  const tempDir = await createTempDir("openclaw-memory-store-");
+  try {
+    const store = new MemoryStore(
+      new PluginDatabase(path.join(tempDir, "memory.sqlite")),
+      embeddingProvider,
+      0.92,
+    );
+
+    await store.upsertMany([
+      memory({
+        kind: "session_state",
+        summary: 'Sender (untrusted metadata): {"label":"openclaw-control-ui"}',
+      }),
+      memory({
+        kind: "preference",
+        summary: "User prefers concise execution-oriented updates.",
+        memoryGroup: "preference:style",
+      }),
+    ]);
+
+    const result = await store.pruneNoise();
+    const active = await store.listActive();
+    assert.equal(result.pruned, 1);
+    assert.equal(active.length, 1);
+    assert.match(active[0].summary, /concise execution-oriented updates/i);
+  } finally {
+    await cleanupTempDir(tempDir);
+  }
+});
+
 function memory(params: {
   kind: MemoryRecord["kind"];
   summary: string;

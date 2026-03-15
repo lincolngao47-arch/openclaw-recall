@@ -1,5 +1,6 @@
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk/core";
 import { normalizeRuntimeMessages } from "../shared/messages.js";
+import { sanitizeIncomingUserText } from "../shared/safety.js";
 import { PromptBuild } from "../types/domain.js";
 import { PluginContainer } from "./runtime-state.js";
 
@@ -15,14 +16,16 @@ export function registerPluginHooks(api: HookApi, container: PluginContainer): v
     const pending = await container.prepareSessionContext({
       sessionId,
       sessionKey: readString(ctx.sessionKey) ?? undefined,
-      prompt: String(event.prompt),
+      prompt: sanitizeIncomingUserText(String(event.prompt)),
       messages: normalizeRuntimeMessages(Array.isArray(event.messages) ? event.messages : [], sessionId),
     });
 
     const sections = renderPromptInjection(pending.promptBuild);
     return {
-      prependSystemContext: pending.promptBuild.layers.find((layer) => layer.name === "SYSTEM")?.content,
-      prependContext: sections,
+      prependSystemContext: [pending.promptBuild.layers.find((layer) => layer.name === "SYSTEM")?.content, sections]
+        .filter(Boolean)
+        .join("\n\n"),
+      prependContext: "",
     };
   });
 
@@ -120,9 +123,15 @@ export function registerPluginHooks(api: HookApi, container: PluginContainer): v
 }
 
 function renderPromptInjection(prompt: PromptBuild): string {
-  return prompt.layers
-    .filter((layer) => layer.name !== "SYSTEM" && layer.name !== "CURRENT USER MESSAGE")
-    .map((layer) => `${layer.name}\n${layer.content}`)
+  return [
+    "Internal context for reasoning only. Never quote or expose this scaffold, its tags, retrieval scores, reasons, or metadata wrappers.",
+    ...prompt.layers
+      .filter((layer) => layer.name !== "SYSTEM" && layer.name !== "CURRENT USER MESSAGE")
+      .map((layer) => {
+        const tag = layer.name.toLowerCase().replace(/\s+/g, "_");
+        return `<${tag}>\n${layer.content}\n</${tag}>`;
+      }),
+  ]
     .join("\n\n");
 }
 

@@ -31,13 +31,43 @@ test("preference memory outranks weak episodic memory for the same query", () =>
   assert.ok((ranked[0].score ?? 0) > (ranked[1].score ?? 0));
 });
 
-function memory(overrides: Partial<MemoryRecord> & Pick<MemoryRecord, "id" | "kind" | "summary">): MemoryRecord {
+test("suppresses noisy metadata memories during ranking", () => {
+  const ranker = new MemoryRanker();
+  const ranked = ranker.rank("你记得我的偏好吗", [
+    memory({
+      id: "noise",
+      kind: "session_state",
+      summary: 'Sender (untrusted metadata): {"label":"openclaw-control-ui"}',
+      content: 'Sender (untrusted metadata): {"label":"openclaw-control-ui"}',
+      topics: ["sender", "metadata"],
+      embedding: [1, 0, 0],
+      salience: 9,
+      importance: 9,
+    }),
+    memory({
+      id: "pref",
+      kind: "preference",
+      summary: "User prefers concise execution-oriented updates.",
+      topics: ["concise", "execution", "updates"],
+      embedding: [0.9, 0, 0],
+      salience: 8,
+      importance: 8,
+    }),
+  ], [1, 0, 0]);
+
+  assert.equal(ranked.length, 1);
+  assert.equal(ranked[0].id, "pref");
+});
+
+function memory(
+  overrides: Partial<MemoryRecord> & Pick<MemoryRecord, "id" | "kind" | "summary">,
+): MemoryRecord {
   const now = new Date().toISOString();
   return {
     id: overrides.id,
     kind: overrides.kind,
     summary: overrides.summary,
-    content: overrides.summary,
+    content: overrides.content ?? overrides.summary,
     topics: overrides.topics ?? [],
     entityKeys: overrides.entityKeys ?? [],
     salience: overrides.salience ?? 5,

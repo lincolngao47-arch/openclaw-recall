@@ -24,6 +24,7 @@ import type {
   TurnProfile,
 } from "../types/domain.js";
 import type { ResolvedPluginConfig } from "../config/schema.js";
+import { sanitizeIncomingUserText, sanitizeTurnForStorage } from "../shared/safety.js";
 
 export type PluginLogger = {
   debug?: (message: string) => void;
@@ -111,12 +112,15 @@ export class PluginContainer {
     prompt: string;
     messages: ChatTurn[];
   }): Promise<PendingSessionContext> {
-    const historyMessages = stripCurrentPrompt(params.messages, params.prompt);
+    const cleanedPrompt = sanitizeIncomingUserText(params.prompt);
+    const historyMessages = stripCurrentPrompt(params.messages, params.prompt).map((turn) =>
+      sanitizeTurnForStorage(turn),
+    );
     const preparedAt = new Date().toISOString();
 
     const state = await this.stateStore.get(params.sessionId);
     const toolResults = await this.toolOutputStore.listRecent(params.sessionId, 6);
-    const memories = await this.memoryRetriever.retrieve(params.prompt, this.config.memory.topK, {
+    const memories = await this.memoryRetriever.retrieve(cleanedPrompt, this.config.memory.topK, {
         sessionId: params.sessionId,
       });
     const compression = this.contextCompressor.compress(historyMessages, state);
@@ -127,14 +131,14 @@ export class PluginContainer {
       compression,
       recentTurns: compression.keptRecentTurns,
       toolResults,
-      userMessage: params.prompt,
+      userMessage: cleanedPrompt,
       includeCurrentUserMessage: false,
     });
 
     const pending: PendingSessionContext = {
       sessionId: params.sessionId,
       sessionKey: params.sessionKey,
-      prompt: params.prompt,
+      prompt: cleanedPrompt,
       promptBuild,
       state,
       memories,
@@ -262,9 +266,12 @@ export class PluginContainer {
     messages: ChatTurn[];
   }): Promise<{ profile: TurnProfile | null; state: SessionState; written: number }> {
     const run = this.getRunContextBySession(params.sessionId);
-    const relevantTurns = buildExtractionTurns(params.sessionId, params.messages, run);
+    const sanitizedMessages = params.messages.map((turn) =>
+      sanitizeTurnForStorage(turn, run?.promptText),
+    );
+    const relevantTurns = buildExtractionTurns(params.sessionId, sanitizedMessages, run);
 
-    for (const turn of params.messages) {
+    for (const turn of sanitizedMessages) {
       await this.eventStore.appendTurn(turn);
     }
 

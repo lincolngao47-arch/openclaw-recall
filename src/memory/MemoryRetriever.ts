@@ -2,6 +2,7 @@ import { EmbeddingProvider } from "./EmbeddingProvider.js";
 import { MemoryStore } from "./MemoryStore.js";
 import { MemoryRanker } from "./MemoryRanker.js";
 import { MemoryRecord } from "../types/domain.js";
+import { sanitizeIncomingUserText } from "../shared/safety.js";
 
 export class MemoryRetriever {
   constructor(
@@ -12,9 +13,10 @@ export class MemoryRetriever {
   ) {}
 
   async retrieve(query: string, limit: number, options: { sessionId?: string } = {}): Promise<MemoryRecord[]> {
+    const cleanQuery = sanitizeIncomingUserText(query);
     const memories = await this.store.search();
-    const queryEmbedding = await this.embeddings.embed(query);
-    const ranked = this.ranker.rank(query, memories, queryEmbedding).slice(0, limit);
+    const queryEmbedding = await this.embeddings.embed(cleanQuery);
+    const ranked = this.ranker.rank(cleanQuery, memories, queryEmbedding).slice(0, limit);
     const boot = options.sessionId
       ? await this.store.listBootCandidates(
           options.sessionId,

@@ -1,5 +1,6 @@
 import { cosineSimilarity, EmbeddingProvider } from "./EmbeddingProvider.js";
 import { PluginDatabase } from "../storage/PluginDatabase.js";
+import { shouldSuppressMemory } from "../shared/safety.js";
 import { MemoryRecord } from "../types/domain.js";
 
 export class MemoryStore {
@@ -24,7 +25,8 @@ export class MemoryStore {
   }
 
   async search(): Promise<MemoryRecord[]> {
-    return this.listActive();
+    const memories = await this.listActive();
+    return memories.filter((memory) => !shouldSuppressMemory(memory));
   }
 
   async getById(id: string): Promise<MemoryRecord | null> {
@@ -54,6 +56,7 @@ export class MemoryStore {
   async listBootCandidates(sessionId: string, limit = 8): Promise<MemoryRecord[]> {
     const memories = await this.listActive();
     return memories
+      .filter((memory) => !shouldSuppressMemory(memory))
       .filter((memory) =>
         memory.kind === "preference" ||
         memory.kind === "semantic" ||
@@ -65,6 +68,19 @@ export class MemoryStore {
         return right.salience + rightBoost - (left.salience + leftBoost);
       })
       .slice(0, limit);
+  }
+
+  async pruneNoise(): Promise<{ scanned: number; pruned: number; ids: string[] }> {
+    const memories = await this.listActive();
+    const noisy = memories.filter((memory) => shouldSuppressMemory(memory));
+    for (const memory of noisy) {
+      this.deactivate(memory.id);
+    }
+    return {
+      scanned: memories.length,
+      pruned: noisy.length,
+      ids: noisy.map((memory) => memory.id),
+    };
   }
 
   async upsertMany(candidates: MemoryRecord[]): Promise<{
@@ -313,6 +329,24 @@ export class MemoryStore {
       active: false,
       supersededAt: new Date().toISOString(),
       supersededBy,
+    };
+    this.database.connection
+      .prepare(`UPDATE memories SET meta_json = ? WHERE id = ?`)
+      .run(JSON.stringify(toMeta(next)), id);
+  }
+
+  private deactivate(id: string): void {
+    const row = this.database.connection
+      .prepare(`SELECT * FROM memories WHERE id = ? LIMIT 1`)
+      .get(id) as MemoryRow | undefined;
+    if (!row) {
+      return;
+    }
+    const memory = this.fromRow(row);
+    const next: MemoryRecord = {
+      ...memory,
+      active: false,
+      supersededAt: new Date().toISOString(),
     };
     this.database.connection
       .prepare(`UPDATE memories SET meta_json = ? WHERE id = ?`)

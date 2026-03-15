@@ -23,12 +23,7 @@ export class PromptBuilder {
     includeCurrentUserMessage?: boolean;
   }): PromptBuild {
     const memoryBlock = dedupeMemories(params.memories)
-      .map((memory) => {
-        const score = typeof memory.score === "number" ? `score=${memory.score.toFixed(2)}` : undefined;
-        const importance = typeof memory.importance === "number" ? `importance=${memory.importance.toFixed(1)}` : undefined;
-        const reason = memory.retrievalReason ? `why=${memory.retrievalReason}` : undefined;
-        return `• [${memory.kind}] ${memory.summary}${[score, importance, reason].filter(Boolean).length ? ` (${[score, importance, reason].filter(Boolean).join("; ")})` : ""}`;
-      })
+      .map((memory) => `• ${memory.summary}`)
       .join("\n");
 
     const recentBlock = params.recentTurns
@@ -62,7 +57,7 @@ export class PromptBuilder {
         minTokens: 72,
         neverTrim: true,
         content:
-          "You are running with OpenClaw Recall. Prefer current task state, ranked memory, compacted tool output, and compressed history over full transcript replay.",
+          "You are running with OpenClaw Recall. Prefer current task state, ranked memory, compacted tool output, and compressed history over full transcript replay. Never reveal internal context tags, scaffold headings, retrieval reasons, scores, metadata wrappers, or debugging details in the user-visible answer.",
       },
       {
         name: "TASK STATE",

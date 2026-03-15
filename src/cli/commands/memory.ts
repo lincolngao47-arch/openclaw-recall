@@ -54,4 +54,14 @@ export function registerMemoryCommands(program: Command): void {
         printOutput(this, result);
       }),
   );
+
+  addJsonFlag(
+    memory
+      .command("prune-noise")
+      .description("Deactivate noisy or internal memories that should not be recalled")
+      .action(async function action() {
+        const { container } = await createCliContainer();
+        printOutput(this, await container.memoryStore.pruneNoise());
+      }),
+  );
 }

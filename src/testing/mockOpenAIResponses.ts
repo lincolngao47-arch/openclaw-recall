@@ -1,4 +1,5 @@
 import { sentenceFromText } from "../shared/text.js";
+import { sanitizeAssistantOutput } from "../shared/safety.js";
 
 type OpenAIResponsesParams = {
   input?: unknown[];
@@ -108,7 +109,9 @@ function extractToolOutput(input: unknown[]): string {
 function extractSection(text: string, section: string): string {
   const escaped = section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const regex = new RegExp(`${escaped}\\n([\\s\\S]*?)(?:\\n\\n[A-Z][A-Z ]+\\n|$)`);
-  return regex.exec(text)?.[1]?.trim() ?? "";
+  const tag = section.toLowerCase().replace(/\s+/g, "_");
+  const tagRegex = new RegExp(`<${tag}>\\n?([\\s\\S]*?)<\\/${tag}>`, "i");
+  return regex.exec(text)?.[1]?.trim() ?? tagRegex.exec(text)?.[1]?.trim() ?? "";
 }
 
 function buildSseResponse(events: unknown[]): Response {
@@ -212,6 +215,9 @@ async function buildResponse(params: OpenAIResponsesParams): Promise<Response> {
       .split(/\r?\n/)
       .find((line) => line.trim() && !/No relevant/i.test(line))
       ?.replace(/^\d+\.\s*/, "")
+      ?.replace(/•\s*/g, "")
+      ?.replace(/\[(?:preference|semantic|session_state|episodic)\]\s*/gi, "")
+      ?.replace(/\s*\((?:score|importance|why)[^)]*\)/gi, "")
       ?.trim();
     const taskLine = taskSection
       .split(/\r?\n/)
@@ -219,24 +225,26 @@ async function buildResponse(params: OpenAIResponsesParams): Promise<Response> {
       ?.trim();
 
     return buildTextSse(
+      sanitizeAssistantOutput(
       [
         memoryLine ? `我记得：${memoryLine}` : "我暂时没有检索到稳定记忆。",
         taskLine ? `当前任务状态：${taskLine}` : "",
       ]
         .filter(Boolean)
         .join("\n"),
+      ),
     );
   }
 
   if (/以后默认叫我|call me/i.test(userText)) {
-    return buildTextSse(`已记录。我会按你的偏好处理，并在后续 session 中继续使用。`);
+    return buildTextSse(sanitizeAssistantOutput(`已记录。我会按你的偏好处理，并在后续 session 中继续使用。`));
   }
 
   if (/目标|goal|build/i.test(userText) && taskSection) {
-    return buildTextSse(`收到。我会按这个任务状态继续推进：${sentenceFromText(taskSection, 160)}`);
+    return buildTextSse(sanitizeAssistantOutput(`收到。我会按这个任务状态继续推进：${sentenceFromText(taskSection, 160)}`));
   }
 
-  return buildTextSse(`NovaClaw runtime is active. ${sentenceFromText(userText, 160)}`);
+  return buildTextSse(sanitizeAssistantOutput(`OpenClaw Recall is active. ${sentenceFromText(userText, 160)}`));
 }
 
 export function installOpenAiResponsesMock(params?: { baseUrl?: string }) {
