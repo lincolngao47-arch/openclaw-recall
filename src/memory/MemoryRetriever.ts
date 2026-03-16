@@ -48,7 +48,8 @@ export class MemoryRetriever {
       : [];
     const visibleBoot = boot.filter((memory) => isMemoryVisible(memory, this.config, options.sessionId));
     const merged = this.mergeCandidates(cleanQuery, ranked, visibleBoot);
-    const selected = this.diversifyCandidates(cleanQuery, merged, limit);
+    const diversified = this.diversifyCandidates(cleanQuery, merged, limit);
+    const selected = this.rebalanceForQueryFacets(cleanQuery, merged, diversified, limit);
     await this.store.touch(selected);
     return {
       memories: selected,
@@ -192,7 +193,11 @@ export class MemoryRetriever {
         const redundancy = selected.length === 0
           ? 0
           : Math.max(...selected.map((picked) => this.memorySimilarity(candidate, picked)));
-        const mmrScore = lambda * relevance - (1 - lambda) * redundancy;
+        const contextBridge =
+          selected.length === 0
+            ? 0
+            : Math.max(...selected.map((picked) => this.contextBridgeAffinity(candidate, picked)));
+        const mmrScore = lambda * relevance - (1 - lambda) * redundancy + contextBridge * 0.18;
         if (mmrScore > bestScore) {
           bestScore = mmrScore;
           bestIndex = index;
@@ -205,6 +210,65 @@ export class MemoryRetriever {
     return selected;
   }
 
+  private rebalanceForQueryFacets(
+    query: string,
+    candidates: MemoryRecord[],
+    selected: MemoryRecord[],
+    limit: number,
+  ): MemoryRecord[] {
+    const preferenceIntent = /偏好|preference|喜欢|prefer|怎么称呼|call me/i.test(query);
+    const projectIntent = /项目|project|focus|重点|上下文|backend|import|retrieval/i.test(query);
+    const taskIntent = /当前任务|task|继续|next step|下一步|继续当前/i.test(query);
+    let next = [...selected];
+
+    if (projectIntent && !next.some((memory) => memory.kind === "semantic")) {
+      next = this.ensureKindPresence(next, candidates, "semantic", limit);
+    }
+    if (taskIntent && limit >= 3 && !next.some((memory) => memory.kind === "session_state")) {
+      next = this.ensureKindPresence(next, candidates, "session_state", limit);
+    }
+    if (preferenceIntent && !next.some((memory) => memory.kind === "preference")) {
+      next = this.ensureKindPresence(next, candidates, "preference", limit);
+    }
+    return next;
+  }
+
+  private ensureKindPresence(
+    selected: MemoryRecord[],
+    candidates: MemoryRecord[],
+    requiredKind: MemoryRecord["kind"],
+    limit: number,
+  ): MemoryRecord[] {
+    const candidate = candidates.find((memory) => memory.kind === requiredKind && !selected.some((picked) => picked.id === memory.id));
+    if (!candidate) {
+      return selected;
+    }
+    if (selected.length < limit) {
+      return [...selected, candidate].slice(0, limit);
+    }
+    const next = [...selected];
+    const replaceIndex = [...next]
+      .map((memory, index) => ({ memory, index }))
+      .sort((left, right) => this.replacementPriority(left.memory) - this.replacementPriority(right.memory))[0]?.index;
+    if (replaceIndex === undefined) {
+      return selected;
+    }
+    next.splice(replaceIndex, 1, candidate);
+    return next;
+  }
+
+  private replacementPriority(memory: MemoryRecord): number {
+    const kindPenalty =
+      memory.kind === "preference"
+        ? 3
+        : memory.kind === "semantic"
+          ? 2
+          : memory.kind === "session_state"
+            ? 1
+            : 0;
+    return (memory.score ?? this.candidatePriority("", memory)) + kindPenalty;
+  }
+
   private candidatePriority(query: string, memory: MemoryRecord): number {
     const base =
       memory.score ??
@@ -212,13 +276,16 @@ export class MemoryRetriever {
         effectiveImportance(memory) * 0.45 +
         (memory.kind === "preference" ? 2.2 : memory.kind === "semantic" ? 1.5 : 0.4);
     const recallIntent = /记得|remember|偏好|preference|项目|project|focus|重点|继续/i.test(query);
+    const preferenceIntent = /偏好|preference|喜欢|prefer|怎么称呼|call me/i.test(query);
+    const projectIntent = /项目|project|focus|重点|上下文|backend|import|retrieval/i.test(query);
+    const taskIntent = /当前任务|task|继续|next step|下一步|继续当前/i.test(query);
     const recallBoost =
       recallIntent && memory.kind === "preference"
-        ? 3.2
+        ? 1.7 + (preferenceIntent ? 1.9 : 0)
         : recallIntent && memory.kind === "semantic"
-          ? 2.4
+          ? 1.5 + (projectIntent ? 2.8 : 0) + (taskIntent ? 0.5 : 0)
           : recallIntent && memory.kind === "session_state"
-            ? 0.8
+            ? 0.5 + (taskIntent ? 2.1 : 0) + (projectIntent ? 0.7 : 0)
             : 0;
     const scopeBoost =
       memory.scope === "private"
@@ -246,4 +313,41 @@ export class MemoryRetriever {
     const sameKind = left.kind === right.kind ? 1 : 0;
     return Math.max(embeddingSimilarity, topicSimilarity, sameGroup, sameSummary, sameKind);
   }
+
+  private contextBridgeAffinity(left: MemoryRecord, right: MemoryRecord): number {
+    if (left.kind === right.kind && left.memoryGroup === right.memoryGroup) {
+      return 0;
+    }
+    const leftTopics = new Set(left.topics.map((topic) => topic.toLowerCase()));
+    const rightTopics = new Set(right.topics.map((topic) => topic.toLowerCase()));
+    const leftEntities = new Set(left.entityKeys.map((entity) => entity.toLowerCase()));
+    const rightEntities = new Set(right.entityKeys.map((entity) => entity.toLowerCase()));
+    const topicOverlap = overlapRatio(leftTopics, rightTopics);
+    const entityOverlap = overlapRatio(leftEntities, rightEntities);
+    const sharedScope = left.scope === right.scope ? 0.08 : 0;
+    const complementaryKinds =
+      left.kind !== right.kind
+        ? 0.18
+        : 0;
+    const taskProjectPair =
+      ((left.kind === "session_state" && right.kind === "semantic") ||
+        (left.kind === "semantic" && right.kind === "session_state"))
+        ? 0.22
+        : 0;
+    const preferenceProjectPair =
+      ((left.kind === "preference" && right.kind === "semantic") ||
+        (left.kind === "semantic" && right.kind === "preference"))
+        ? 0.12
+        : 0;
+    return Math.max(topicOverlap, entityOverlap) + sharedScope + complementaryKinds + taskProjectPair + preferenceProjectPair;
+  }
+}
+
+function overlapRatio(left: Set<string>, right: Set<string>): number {
+  if (left.size === 0 || right.size === 0) {
+    return 0;
+  }
+  const overlap = [...left].filter((value) => right.has(value)).length;
+  const union = new Set([...left, ...right]).size || 1;
+  return overlap / union;
 }

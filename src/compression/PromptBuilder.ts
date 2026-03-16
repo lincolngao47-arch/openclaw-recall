@@ -22,12 +22,15 @@ export class PromptBuilder {
     userMessage: string;
     includeCurrentUserMessage?: boolean;
   }): PromptBuild {
+    const digest = buildMemoryDigest(params.memories, params.userMessage);
     const memoryBlock = sortMemoriesForPrompt(params.memories, params.userMessage)
+      .filter((memory) =>
+        !digest.covered.some((covered) => covered.id === memory.id || isPromptDuplicate(memory, covered)),
+      )
+      .slice(0, 4)
       .map((memory) => `• ${memory.summary}`)
       .join("\n");
-
-    const memoryDigest = buildMemoryDigest(params.memories, params.userMessage);
-    const effectiveMemoryBlock = [memoryDigest, memoryBlock].filter(Boolean).join("\n")
+    const effectiveMemoryBlock = [digest.text, memoryBlock].filter(Boolean).join("\n")
       .trim();
 
     const recentBlock = params.recentTurns
@@ -155,27 +158,56 @@ function promptPriority(memory: MemoryRecord, recallIntent: boolean): number {
   return base + typeBias + recallBias;
 }
 
-function buildMemoryDigest(memories: MemoryRecord[], userMessage: string): string {
+function buildMemoryDigest(memories: MemoryRecord[], userMessage: string): { text: string; covered: MemoryRecord[] } {
   const sorted = sortMemoriesForPrompt(memories, userMessage);
   if (sorted.length === 0) {
-    return "";
+    return { text: "", covered: [] };
   }
-  const stablePreferences = sorted
-    .filter((memory) => memory.kind === "preference")
-    .map((memory) => memory.summary)
-    .slice(0, 2);
-  const currentProject = sorted
-    .filter((memory) => memory.kind === "semantic" || memory.kind === "session_state")
-    .map((memory) => memory.summary)
-    .slice(0, 2);
+  const stablePreferences = selectPromptHighlights(
+    sorted.filter((memory) => memory.kind === "preference"),
+    2,
+  );
+  const currentProject = selectPromptHighlights(
+    sorted.filter((memory) => memory.kind === "semantic" || memory.kind === "session_state"),
+    2,
+  );
   const lines: string[] = [];
+  const covered: MemoryRecord[] = [];
   if (stablePreferences.length > 0) {
-    lines.push(`Use these stable user preferences first: ${stablePreferences.join(" | ")}`);
+    lines.push(`Use these stable user preferences first: ${stablePreferences.map((memory) => memory.summary).join(" | ")}`);
+    covered.push(...stablePreferences);
   }
   if (currentProject.length > 0) {
-    lines.push(`Use this current project/task context if relevant: ${currentProject.join(" | ")}`);
+    lines.push(`Use this current project/task context if relevant: ${currentProject.map((memory) => memory.summary).join(" | ")}`);
+    covered.push(...currentProject);
   }
-  return lines.join("\n");
+  return {
+    text: lines.join("\n"),
+    covered,
+  };
+}
+
+function selectPromptHighlights(memories: MemoryRecord[], limit: number): MemoryRecord[] {
+  const picked: MemoryRecord[] = [];
+  for (const memory of memories) {
+    if (picked.some((candidate) => isPromptDuplicate(memory, candidate))) {
+      continue;
+    }
+    picked.push(memory);
+    if (picked.length >= limit) {
+      break;
+    }
+  }
+  return picked;
+}
+
+function isPromptDuplicate(left: MemoryRecord, right: MemoryRecord): boolean {
+  const sameGroup = left.memoryGroup && right.memoryGroup && left.memoryGroup === right.memoryGroup;
+  const leftTokens = new Set(left.summary.toLowerCase().split(/\W+/).filter(Boolean));
+  const rightTokens = new Set(right.summary.toLowerCase().split(/\W+/).filter(Boolean));
+  const overlap = [...leftTokens].filter((token) => rightTokens.has(token)).length;
+  const union = new Set([...leftTokens, ...rightTokens]).size || 1;
+  return Boolean(sameGroup) || overlap / union >= 0.6;
 }
 
 function dedupeTools(toolResults: CompactedToolResult[]): CompactedToolResult[] {
