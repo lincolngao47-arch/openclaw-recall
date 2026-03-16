@@ -18,6 +18,7 @@ export function registerStatusCommands(program: Command): void {
       const latestPrune = await readJsonFile<PruneReport | null>(pluginPaths.latestPrunePath, null);
       const identityStatus = identity.status();
       const backendHealth = await container.memoryStore.pingBackend();
+      const memorySpaces = await container.memoryStore.listMemorySpaces();
       const noisyCandidates = memories
         .map((memory) => ({ id: memory.id, reasons: explainSuppression(memory) }))
         .filter((entry) => entry.reasons.length > 0);
@@ -32,6 +33,13 @@ export function registerStatusCommands(program: Command): void {
         identity: identityStatus,
         backendHealth,
         backendType: resolved.identity.backendType,
+        memorySpaceId: resolved.identity.memorySpaceId ?? identityStatus.memorySpaceId ?? null,
+        availableMemorySpaces: memorySpaces.map((space) => ({
+          id: space.id,
+          backend: space.backend,
+          memoryCount: space.memoryCount,
+          updatedAt: space.updatedAt ?? null,
+        })),
         retrievalMode: resolved.retrieval.mode,
         autoWriteEnabled: resolved.memory.autoWrite,
         openclawHome,

@@ -22,6 +22,7 @@ export function registerDoctorCommands(program: Command): void {
       const memories = await container.memoryStore.listActive();
       const identityStatus = identity.status();
       const backendHealth = await container.memoryStore.pingBackend();
+      const memorySpaces = await container.memoryStore.listMemorySpaces();
       const validation = validateResolvedConfig(resolved, ["plugins.entries.openclaw-recall.config", "defaults"]);
       const latestImport = await importService.status();
       const latestExport = await exportService.latest();
@@ -97,7 +98,7 @@ export function registerDoctorCommands(program: Command): void {
                 : identityStatus.reconnectReady && backendHealth.ok
                   ? "pass"
                   : "warn",
-            detail: `mode=${identityStatus.mode}, backend=${identityStatus.backendType}, configured=${identityStatus.configured}, reachability=${identityStatus.reachability}, backendHealth=${backendHealth.detail}`,
+            detail: `mode=${identityStatus.mode}, backend=${identityStatus.backendType}, configured=${identityStatus.configured}, reachability=${identityStatus.reachability}, backendHealth=${backendHealth.detail}, space=${resolved.identity.memorySpaceId ?? identityStatus.memorySpaceId ?? "default"}, visibleSpaces=${memorySpaces.length}`,
           },
           {
             name: "env/config precedence",

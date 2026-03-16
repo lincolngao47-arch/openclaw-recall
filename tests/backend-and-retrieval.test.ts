@@ -139,6 +139,71 @@ test("recall-http backend persists and reconnects the same memory space", async 
     const listed = await reconnectStore.listActive();
     assert.equal(listed.length, 1);
     assert.equal(listed[0].summary, memory.summary);
+    const spaces = await reconnectStore.listMemorySpaces();
+    assert.equal(spaces.length, 1);
+    assert.equal(spaces[0].id, "team-space");
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await cleanupTempDir(tempDir);
+  }
+});
+
+test("recall-http backend supports update and delete across reconnect clients", async () => {
+  const tempDir = await createTempDir("openclaw-recall-http-crud-");
+  const server = await startRecallHttpBackendServer({
+    dataDir: tempDir,
+    port: 0,
+  });
+  try {
+    const address = server.address();
+    assert(address && typeof address === "object");
+    const port = address.port;
+    const config = buildConfig({
+      storageDir: tempDir,
+      databasePath: path.join(tempDir, "memory.sqlite"),
+      identity: {
+        ...defaultPluginConfig.identity,
+        mode: "cloud",
+        backendType: "recall-http",
+        endpoint: `http://127.0.0.1:${port}`,
+        memorySpaceId: "team-space",
+      },
+    });
+    const store = new MemoryStore(new PluginDatabase(config.databasePath), createEmbeddingProvider(config), 0.92, config);
+    const memory = buildMemory("User prefers concise status updates.", {
+      memoryGroup: "preference:status",
+    });
+    await store.upsertMany([memory]);
+    const updated = await store.updateMemory(memory.id, {
+      summary: "User prefers concise structured status updates.",
+      content: "User prefers concise structured status updates.",
+    });
+    assert.equal(updated?.summary, "User prefers concise structured status updates.");
+
+    const reconnectConfig = buildConfig({
+      storageDir: tempDir,
+      databasePath: path.join(tempDir, "memory-2.sqlite"),
+      identity: {
+        ...defaultPluginConfig.identity,
+        mode: "reconnect",
+        backendType: "recall-http",
+        endpoint: `http://127.0.0.1:${port}`,
+        memorySpaceId: "team-space",
+        identityKey: "team-space",
+      },
+    });
+    const reconnectStore = new MemoryStore(
+      new PluginDatabase(reconnectConfig.databasePath),
+      createEmbeddingProvider(reconnectConfig),
+      0.92,
+      reconnectConfig,
+    );
+    const afterUpdate = await reconnectStore.getById(memory.id);
+    assert.equal(afterUpdate?.summary, "User prefers concise structured status updates.");
+    const deleted = await reconnectStore.deleteMemory(memory.id);
+    assert.equal(deleted.deleted, true);
+    const active = await reconnectStore.listActive();
+    assert.equal(active.length, 0);
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     await cleanupTempDir(tempDir);

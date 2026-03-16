@@ -4,6 +4,8 @@
 
 This matrix applies to `1.0.1`.
 
+The `main` branch may contain post-`1.0.1` development work for `v1.1.0`; do not treat those paths as release-verified unless they are called out below.
+
 ## Verified versions
 
 ### OpenClaw

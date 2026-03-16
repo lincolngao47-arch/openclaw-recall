@@ -11,6 +11,13 @@ It now supports two persistent identity paths:
 - `local` mode: durable memory stays on the current OpenClaw home
 - `reconnect` mode: the same identity key or memory space id can reconnect to the same logical memory space across machines
 
+The current `main` branch also includes the first v1.1 backend foundation:
+
+- built-in `recall-http` backend support for remote memory spaces
+- backend/operator CLI via `openclaw-recall backend serve`
+- hybrid retrieval foundation with explicit `keyword` / `embedding` / `hybrid` modes
+- `private` / `workspace` / `shared` / `session` scope-aware retrieval rules
+
 ## Why OpenClaw users install it
 
 OpenClaw Recall targets four recurring problems:
@@ -120,6 +127,7 @@ openclaw-recall import status
 openclaw-recall export memory
 openclaw-recall export profile
 openclaw-recall export session --session <sessionId>
+openclaw-recall backend serve
 openclaw-recall memory list
 openclaw-recall memory inspect <id>
 openclaw-recall memory search "<query>"

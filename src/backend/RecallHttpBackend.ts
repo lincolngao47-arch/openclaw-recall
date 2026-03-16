@@ -5,20 +5,12 @@ import { URL } from "node:url";
 import type { ResolvedPluginConfig } from "../config/schema.js";
 import type { MemoryRecord } from "../types/domain.js";
 import { shouldSuppressMemory } from "../shared/safety.js";
-
-type UpsertResult = {
-  candidateCount: number;
-  written: number;
-  updated: number;
-  superseded: number;
-};
-
-type PruneResult = {
-  scanned: number;
-  pruned: number;
-  ids: string[];
-  dryRun: boolean;
-};
+import type {
+  MemoryDeleteResult,
+  MemoryPruneResult,
+  MemorySpaceSummary,
+  MemoryWriteResult,
+} from "./MemoryBackend.js";
 
 export class RecallHttpBackendClient {
   constructor(private readonly config: ResolvedPluginConfig) {}
@@ -44,22 +36,39 @@ export class RecallHttpBackendClient {
     return await this.request<MemoryRecord[]>("GET", this.spacePath("/memories"));
   }
 
-  async getById(id: string): Promise<MemoryRecord | null> {
+  async searchMemory(query?: string): Promise<MemoryRecord[]> {
+    const suffix = query?.trim() ? `/memories/search?q=${encodeURIComponent(query.trim())}` : "/memories";
+    return await this.request<MemoryRecord[]>("GET", this.spacePath(suffix));
+  }
+
+  async getMemory(id: string): Promise<MemoryRecord | null> {
     return await this.request<MemoryRecord | null>("GET", this.spacePath(`/memories/${id}`));
   }
 
-  async upsertMany(records: MemoryRecord[]): Promise<UpsertResult> {
-    return await this.request<UpsertResult>("POST", this.spacePath("/memories/upsert"), {
+  async writeMemory(records: MemoryRecord[]): Promise<MemoryWriteResult> {
+    return await this.request<MemoryWriteResult>("POST", this.spacePath("/memories/upsert"), {
       records,
     });
   }
 
-  async touch(ids: string[]): Promise<void> {
+  async updateMemory(id: string, patch: Partial<MemoryRecord>): Promise<MemoryRecord | null> {
+    return await this.request<MemoryRecord | null>("PATCH", this.spacePath(`/memories/${id}`), { patch });
+  }
+
+  async deleteMemory(id: string): Promise<MemoryDeleteResult> {
+    return await this.request<MemoryDeleteResult>("DELETE", this.spacePath(`/memories/${id}`));
+  }
+
+  async touchMemory(ids: string[]): Promise<void> {
     await this.request("POST", this.spacePath("/memories/touch"), { ids });
   }
 
-  async pruneNoise(dryRun: boolean): Promise<PruneResult> {
-    return await this.request<PruneResult>("POST", this.spacePath("/memories/prune-noise"), { dryRun });
+  async pruneNoise(dryRun: boolean): Promise<MemoryPruneResult> {
+    return await this.request<MemoryPruneResult>("POST", this.spacePath("/memories/prune-noise"), { dryRun });
+  }
+
+  async listMemorySpaces(): Promise<MemorySpaceSummary[]> {
+    return await this.request<MemorySpaceSummary[]>("GET", "/v1/spaces");
   }
 
   private async request<T = unknown>(method: string, pathname: string, body?: unknown): Promise<T> {
@@ -123,6 +132,10 @@ export async function startRecallHttpBackendServer(params: {
         reply(res, 200, { ok: true, mode: "recall-http" });
         return;
       }
+      if (url.pathname === "/v1/spaces" && req.method === "GET") {
+        reply(res, 200, await listSpaces(params.dataDir));
+        return;
+      }
 
       const match = url.pathname.match(/^\/v1\/spaces\/([^/]+)\/memories(?:\/([^/]+))?(?:\/([^/]+))?$/);
       if (!match) {
@@ -132,11 +145,28 @@ export async function startRecallHttpBackendServer(params: {
       const [, encodedSpace, maybeId, maybeAction] = match;
       const spaceId = decodeURIComponent(encodedSpace);
       const filePath = path.join(params.dataDir, `${spaceId}.json`);
-      const payload = req.method === "POST" ? await readBody(req) : undefined;
+      const payload = req.method === "POST" || req.method === "PATCH" ? await readBody(req) : undefined;
       const records = await readSpace(filePath);
 
       if (req.method === "GET" && !maybeId) {
         reply(res, 200, records.filter((record) => record.active !== false));
+        return;
+      }
+      if (req.method === "GET" && maybeId === "search") {
+        const query = url.searchParams.get("q")?.trim().toLowerCase() ?? "";
+        const tokens = query.split(/\s+/).filter(Boolean);
+        if (tokens.length === 0) {
+          reply(res, 200, records.filter((record) => record.active !== false && !shouldSuppressMemory(record)));
+          return;
+        }
+        const filtered = records.filter((record) => {
+          if (record.active === false || shouldSuppressMemory(record)) {
+            return false;
+          }
+          const haystack = `${record.summary} ${record.content} ${record.topics.join(" ")} ${record.entityKeys.join(" ")}`.toLowerCase();
+          return tokens.some((token) => haystack.includes(token));
+        });
+        reply(res, 200, filtered);
         return;
       }
       if (req.method === "GET" && maybeId && !maybeAction) {
@@ -159,6 +189,27 @@ export async function startRecallHttpBackendServer(params: {
         }
         await writeSpace(filePath, records);
         reply(res, 200, { ok: true });
+        return;
+      }
+      if (req.method === "PATCH" && maybeId && !maybeAction) {
+        const record = records.find((entry) => entry.id === maybeId);
+        if (!record) {
+          reply(res, 200, null);
+          return;
+        }
+        const patch = (payload?.patch ?? {}) as Partial<MemoryRecord>;
+        Object.assign(record, patch, { id: record.id });
+        await writeSpace(filePath, records);
+        reply(res, 200, record);
+        return;
+      }
+      if (req.method === "DELETE" && maybeId && !maybeAction) {
+        const next = records.filter((record) => record.id !== maybeId);
+        const deleted = next.length !== records.length;
+        if (deleted) {
+          await writeSpace(filePath, next);
+        }
+        reply(res, 200, { deleted });
         return;
       }
       if (req.method === "POST" && maybeId === "prune-noise") {
@@ -196,7 +247,7 @@ export async function startRecallHttpBackendServer(params: {
   return server;
 }
 
-function upsertRecords(store: MemoryRecord[], incoming: MemoryRecord[]): UpsertResult {
+function upsertRecords(store: MemoryRecord[], incoming: MemoryRecord[]): MemoryWriteResult {
   let written = 0;
   let updated = 0;
   let superseded = 0;
@@ -280,6 +331,34 @@ async function readSpace(filePath: string): Promise<MemoryRecord[]> {
 async function writeSpace(filePath: string, records: MemoryRecord[]): Promise<void> {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, JSON.stringify(records, null, 2));
+}
+
+async function listSpaces(dataDir: string): Promise<MemorySpaceSummary[]> {
+  await fs.mkdir(dataDir, { recursive: true });
+  const files = await fs.readdir(dataDir);
+  const spaces: MemorySpaceSummary[] = [];
+  for (const file of files) {
+    if (!file.endsWith(".json")) {
+      continue;
+    }
+    const filePath = path.join(dataDir, file);
+    const spaceId = file.replace(/\.json$/, "");
+    const records = await readSpace(filePath);
+    const active = records.filter((record) => record.active !== false);
+    const scopeCounts = active.reduce<Record<string, number>>((summary, record) => {
+      const key = record.scope ?? "private";
+      summary[key] = (summary[key] ?? 0) + 1;
+      return summary;
+    }, {});
+    spaces.push({
+      id: spaceId,
+      backend: "recall-http",
+      memoryCount: active.length,
+      updatedAt: active[0]?.lastSeenAt,
+      scopeCounts,
+    });
+  }
+  return spaces.sort((left, right) => (right.updatedAt ?? "").localeCompare(left.updatedAt ?? ""));
 }
 
 async function readBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {

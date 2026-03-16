@@ -32,7 +32,7 @@ export class MemoryRetriever {
   }> {
     const cleanQuery = sanitizeIncomingUserText(query);
     const usedMode = this.resolveRetrievalMode();
-    const memories = (await this.store.search()).filter((memory) =>
+    const memories = (await this.store.search(cleanQuery)).filter((memory) =>
       isMemoryVisible(memory, this.config, options.sessionId),
     );
     const queryEmbedding = usedMode === "keyword" ? [] : await this.embeddings.embed(cleanQuery);
