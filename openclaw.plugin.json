@@ -2,7 +2,7 @@
   "id": "openclaw-recall",
   "name": "OpenClaw Recall",
   "description": "Persistent memory, context compression, and profile visibility for OpenClaw.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "uiHints": {
     "identity.mode": {
       "label": "Identity Mode",

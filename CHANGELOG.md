@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.0
+
+- improved retrieval composition with candidate-pool expansion, MMR-style diversification, and relation-aware retrieval stitching
+- sharpened recall queries so mixed questions can return stable preferences together with current project/task context instead of over-returning near-duplicate preference rows
+- reduced duplicate prompt injection in `RELEVANT MEMORY` with a stronger memory digest and duplicate-aware prompt composition
+- upgraded tool-output compaction with stronger structural chunking, repeated-line collapse, and provider-wrapper unwrapping before compaction
+- improved import benchmark coverage and verified better signal retention for preference plus project-context imports while continuing to reject noise and sensitive rows
+- added focused retrieval-quality, compaction-quality, import-quality, prompt-composition, and operator-visibility benchmark fixtures
+- kept hygiene, scaffold leakage prevention, clean-answer discipline, and inspectability intact while adding the new retrieval and compaction logic
+
 ## 1.1.0
 
 - added a formal `MemoryBackend` abstraction with `LocalBackend`, built-in `recall-http` remote backend support, and reconnect-mode access to the same memory space across installs

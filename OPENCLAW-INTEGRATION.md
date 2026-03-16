@@ -84,12 +84,12 @@ openclaw-recall config validate
 ### `cloud`
 
 - uses a remote identity-backed memory service
-- in `1.1.0`, the built-in release-verified remote path is `recall-http`
+- in `1.2.0`, the built-in release-verified remote path is `recall-http`
 - use `cloud` or `reconnect` when the endpoint, identity, and memory space need to follow you across machines
 
 ### Built-in `recall-http` path
 
-- `1.1.0` includes a built-in `recall-http` backend path
+- `1.2.0` includes a built-in `recall-http` backend path
 - it is exercised through clean-consumer reconnect/import/export roundtrip tests
 - restored installs surface project focus or stable preferences in natural-language recall, not only in inspect output
 

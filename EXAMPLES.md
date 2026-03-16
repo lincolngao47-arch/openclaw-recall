@@ -43,12 +43,19 @@ Expected result:
 
 - relevant memories are retrieved before prompt build
 - the assistant recalls `Felix`, `中文`, and `简洁`
+- when the query asks for both preferences and project context, recall can mix both instead of returning only near-duplicate preference rows
 - profile output shows retrieval evidence
 
 Example clean answer shape:
 
 ```text
 我记得你偏直接、偏执行导向，也更喜欢简洁、结构化的回复。
+```
+
+Or, for a mixed memory query:
+
+```text
+我记得你偏中文、偏简洁；当前项目重点是 backend、scope 和 import quality。
 ```
 
 The answer should not include:
@@ -72,6 +79,7 @@ Expected result:
 - raw tool payload is compacted
 - `savedTokens` becomes non-zero
 - `toolTokensSavedSource` remains `estimated`, not fake-exact
+- compacted output preserves useful structure such as commands, code, errors, and sectioned text instead of flattening everything into generic lines
 
 ## Inspect what happened
 

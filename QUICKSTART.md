@@ -2,7 +2,7 @@
 
 Install OpenClaw Recall, prove the hooks are active, and verify memory, recall, compression, and profile output with the fewest moving parts.
 
-Current stable version: `1.1.0`.
+Current stable version: `1.2.0`.
 
 ## Prerequisites
 
@@ -109,6 +109,7 @@ That additionally checks:
 - reconnect to the same remote memory space from a clean consumer install
 - import/export restore behavior and restored doctor/status/memory explain output
 - restored natural-language recall quality, not only inspect evidence
+- retrieval-quality, import-quality, operator-visibility, and compaction benchmarks
 
 ## What success looks like
 

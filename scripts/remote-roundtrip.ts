@@ -52,7 +52,7 @@ async function main(): Promise<void> {
         sessionKey: "remote:2",
         runId: "remote-run-2",
         sessionFile: path.join(first.sessionDir, "remote-2.jsonl"),
-        prompt: "项目上下文：Recall v1.1 主要聚焦 backend、scope 和 import quality。",
+        prompt: "项目上下文：Recall v1.2 主要聚焦 retrieval、scope 和 import quality。",
       });
 
       const memoryExport = JSON.parse(

@@ -4,7 +4,7 @@
 
 OpenClaw Recall is a focused memory infrastructure plugin for OpenClaw. It adds automatic memory write, cross-session recall, prompt compression, tool output compaction, and inspectable profile data **without replacing OpenClaw's runtime or product shell**.
 
-Current stable release: **`1.1.0`**
+Current stable release: **`1.2.0`**
 
 npm package: **`@felixypz/openclaw-recall`**
 
@@ -28,23 +28,26 @@ OpenClaw Recall solves that with:
 - write-time and retrieval-time guardrails that keep metadata noise, wrapper text, and scaffold fragments out of durable memory
 - clean user-visible answers: internal scaffold, scores, and debug annotations stay in inspect paths only
 
-## What's new in 1.1.0
+## What's new in 1.2.0
 
-`1.1.0` turns OpenClaw Recall into a release-grade memory infrastructure layer for OpenClaw:
+`1.2.0` is a memory-first release. It improves how Recall composes and injects memory, and it adds practical token-efficiency gains without turning Recall into a generic compaction framework:
 
-- built-in `recall-http` backend support for remote memory spaces
-- reconnectable memory spaces across machines
-- backend/operator CLI via `openclaw-recall backend serve`
-- hybrid retrieval foundation with explicit `keyword`, `embedding`, and `hybrid` modes
-- scope-aware memory behavior across:
-  - `private`
-  - `workspace`
-  - `shared`
-  - `session`
-- `semantic` memory now defaults to `workspace`; `shared` remains explicit and opt-in
-- clean-consumer reconnect / import / export roundtrip coverage against the built-in backend
-- restored natural-language recall after reconnect/import surfaces stable preferences or current project focus, not only inspect evidence
-- lifecycle-aware hygiene for stale, superseded, expired, and retrieval-ineligible records
+- retrieval now better mixes:
+  - stable preferences
+  - current project context
+  - active task/session context
+- retrieval gate skips more irrelevant memory work for command-like prompts
+- candidate-pool expansion and MMR-style diversification reduce duplicate preference-heavy recall
+- relation-aware retrieval stitching improves project/task recall after import or restore
+- `RELEVANT MEMORY` is less duplicate-heavy and more relevance-per-token efficient
+- tool-output compaction preserves more structure:
+  - commands
+  - error stacks
+  - code blocks
+  - semi-structured sections
+- provider-style wrapper payloads are unwrapped before compaction, so compacted tool output reflects useful text instead of JSON shells
+- import retains more useful signal while continuing to reject noise, sensitive rows, and low-value wrappers
+- new retrieval, compaction, import, and operator benchmarks back the release with stronger evidence
 
 ## 3-minute install
 
@@ -142,7 +145,7 @@ The recommended first-use path is:
 
 If you already have transcripts or memory files, importing them is usually a better first proof than a synthetic seed chat.
 
-Import behavior in `1.1.0`:
+Import behavior in `1.2.0`:
 
 - duplicate rows are merged or superseded instead of duplicated
 - `rejectedNoise`, `rejectedSensitive`, and `uncertainCandidates` are tracked separately
@@ -295,7 +298,7 @@ That data stays in inspect/debug paths only. Normal chat replies remain clean.
 
 ## Compatibility
 
-Verified for `1.1.0`:
+Verified for `1.2.0`:
 
 - Node.js `24.10.0` and `24.12.0`
 - OpenClaw `2026.3.13`
@@ -319,7 +322,7 @@ OpenClaw Recall does not pretend every number is exact.
 - OpenClaw plugin CLI exposure through `openclaw <subcommand>` is still upstream-limited; use `openclaw-recall`
 - OpenClaw may emit `plugins.allow is empty` warning noise in some install/info flows
 - memory conflict resolution is still rule-based, even though common stable preference changes now supersede older rows
-- reconnect and cloud-backed continuity in `1.1.0` use the built-in `recall-http` backend; generic external remote backends are not release-verified
+- reconnect and cloud-backed continuity in `1.2.0` use the built-in `recall-http` backend; generic external remote backends are not release-verified
 
 These are known release limitations, not blockers for normal use.
 
@@ -337,7 +340,7 @@ npm run verify
 npm run release:build
 ```
 
-This README describes the `1.1.0` release line. See [COMPATIBILITY.md](/Users/felix/Documents/openclaw-memory-plugin/COMPATIBILITY.md) for exact verified, supported, and partial coverage.
+This README describes the `1.2.0` release line. See [COMPATIBILITY.md](/Users/felix/Documents/openclaw-memory-plugin/COMPATIBILITY.md) for exact verified, supported, and partial coverage.
 
 ## Documentation
 

@@ -1,27 +1,26 @@
 # Release Notes
 
-## OpenClaw Recall v1.1.0
+## OpenClaw Recall v1.2.0
 
-`1.1.0` is the first release that makes OpenClaw Recall a full persistent-memory infrastructure plugin instead of only a local memory enhancement layer. It adds a real reconnectable backend path, hybrid retrieval, shared scopes, smarter import/export/recovery, lifecycle-aware hygiene, and stronger operator visibility while keeping the plugin boundary focused on OpenClaw memory.
+`1.2.0` is a real minor release because it materially improves Recall's memory composition and practical token efficiency. The focus is still memory-first: better retrieval composition, better prompt relevance-per-token, cleaner tool-output compaction, and stronger import/retrieval benchmarks without weakening hygiene or output safety.
 
 ### Highlights
 
-- built-in `recall-http` backend support for remote persistent memory spaces
-- reconnectable memory spaces across machines and clean installs
-- formal `keyword` / `embedding` / `hybrid` retrieval modes with explainable contribution reporting
-- scope-aware memory behavior across `private`, `workspace`, `shared`, and `session`
-- smarter import/export/recovery flows with scope preservation and duplicate merge/supersede reporting
-- lifecycle-aware hygiene for stale semantic, superseded, expired, and retrieval-ineligible records
-- stronger operator surfaces for `doctor`, `status`, `memory inspect`, `memory explain`, `profile inspect`, and `session inspect`
+- candidate-pool expansion and MMR-style diversification reduce duplicate-heavy recall
+- relation-aware retrieval stitching improves mixed recall across stable preference, project context, and active task/session state
+- `RELEVANT MEMORY` is less duplicate-heavy and more efficient per token
+- tool-output compaction preserves more useful structure, including commands, code blocks, and error-rich output
+- wrapper-heavy provider payloads are unwrapped before compaction so compression acts on useful text instead of JSON shells
+- import quality is stronger in practice: more useful signal survives while noise and sensitive rows remain rejected
+- new benchmark coverage proves retrieval, compaction, import, and operator behavior more directly
 
 ### User-visible benefits
 
-- persistent memory can survive resets, reinstalls, clean installs, and machine switches through reconnectable memory spaces
-- restored installs surface remembered project context or stable preferences in normal answers, not only in inspect/debug output
-- hybrid retrieval keeps prompts leaner while still falling back safely when embeddings are unavailable
-- scope-aware behavior makes cross-agent shared recall possible without accidentally leaking private memory
-- lifecycle-aware hygiene keeps stale or superseded memory inspectable without letting it pollute normal retrieval
-- operator debugging is stronger and more honest about exact versus estimated metrics
+- recall now does a better job of mixing “who the user is”, “what the project is”, and “what the current task is”
+- prompts waste less space on duplicate preference summaries
+- tool-output compaction keeps more high-value structure per token
+- imports are more likely to produce useful later recall instead of just adding rows
+- operator surfaces remain honest and inspectable while the memory system gets more selective
 
 ### Install
 
