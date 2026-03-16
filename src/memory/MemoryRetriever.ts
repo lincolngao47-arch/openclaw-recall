@@ -5,6 +5,7 @@ import { MemoryRecord, RetrievalMode } from "../types/domain.js";
 import { sanitizeIncomingUserText } from "../shared/safety.js";
 import type { ResolvedPluginConfig } from "../config/schema.js";
 import { isMemoryVisible } from "./scopes.js";
+import { explainSuppression } from "./MemoryRanker.js";
 
 export class MemoryRetriever {
   constructor(
@@ -67,6 +68,62 @@ export class MemoryRetriever {
 
   async explain(query: string, limit: number, options: { sessionId?: string } = {}): Promise<MemoryRecord[]> {
     return (await this.retrieveWithContext(query, limit, options)).memories;
+  }
+
+  async explainDetailed(
+    query: string,
+    limit: number,
+    options: { sessionId?: string } = {},
+  ): Promise<{
+    query: string;
+    retrievalMode: RetrievalMode;
+    selected: MemoryRecord[];
+    suppressed: Array<{ id: string; summary: string; reasons: string[] }>;
+    keywordContribution: number;
+    semanticContribution: number;
+  }> {
+    const cleanQuery = sanitizeIncomingUserText(query);
+    const usedMode = this.resolveRetrievalMode();
+    const all = (await this.store.listAll()).filter((memory) =>
+      isMemoryVisible(memory, this.config, options.sessionId),
+    );
+    const suppressed = all
+      .map((memory) => ({ memory, reasons: explainSuppression(memory) }))
+      .filter((entry) => entry.reasons.length > 0)
+      .map((entry) => ({
+        id: entry.memory.id,
+        summary: entry.memory.summary,
+        reasons: entry.reasons,
+      }));
+    const selected = (await this.retrieveWithContext(cleanQuery, limit, options));
+    const selectedWithBreakdown = selected.memories.map((memory) =>
+      memory.scoreBreakdown
+        ? memory
+        : {
+            ...memory,
+            scoreBreakdown: {
+              retrievalMode: usedMode,
+              semanticSimilarity: 0,
+              semanticContribution: 0,
+              keywordContribution: 0,
+              salience: memory.salience,
+              recency: 0,
+              confidence: memory.confidence ?? 0,
+              typeWeight: 0,
+              overlap: 0,
+              redundancyPenalty: 0,
+              finalScore: memory.score ?? memory.salience,
+            },
+          },
+    );
+    return {
+      query: cleanQuery,
+      retrievalMode: usedMode,
+      selected: selectedWithBreakdown,
+      suppressed,
+      keywordContribution: selected.keywordContribution,
+      semanticContribution: selected.semanticContribution,
+    };
   }
 
   embeddingAvailability(): "exact" | "local" | "unavailable" {

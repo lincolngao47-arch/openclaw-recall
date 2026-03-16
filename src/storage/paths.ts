@@ -11,6 +11,8 @@ export function resolvePluginPaths(env: NodeJS.ProcessEnv = process.env): {
   latestImportPath: string;
   latestExportPath: string;
   latestPrunePath: string;
+  latestReindexPath: string;
+  latestCompactPath: string;
 } {
   const openclawHome = resolveOpenClawHome(env);
   const pluginRoot = path.join(openclawHome, "plugins", "openclaw-recall");
@@ -25,5 +27,7 @@ export function resolvePluginPaths(env: NodeJS.ProcessEnv = process.env): {
     latestImportPath: path.join(reportsDir, "latest-import.json"),
     latestExportPath: path.join(reportsDir, "latest-export.json"),
     latestPrunePath: path.join(reportsDir, "latest-prune.json"),
+    latestReindexPath: path.join(reportsDir, "latest-reindex.json"),
+    latestCompactPath: path.join(reportsDir, "latest-compact.json"),
   };
 }

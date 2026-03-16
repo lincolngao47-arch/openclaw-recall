@@ -76,6 +76,7 @@ export class ImportService {
         episodic: "private",
         ...options.scopeMapping,
       },
+      scopeCounts: {},
     };
 
     if (mode === "run") {
@@ -97,6 +98,11 @@ export class ImportService {
       job.rejectedNoise += fileReport.rejected;
       job.rejectedSensitive += fileReport.rejectedSensitive;
       job.uncertainCandidates += fileReport.uncertain;
+      for (const [scope, count] of Object.entries(fileReport.scopeCounts ?? {})) {
+        if (count) {
+          job.scopeCounts![scope as MemoryScope] = (job.scopeCounts![scope as MemoryScope] ?? 0) + count;
+        }
+      }
     }
 
     job.completedAt = new Date().toISOString();
@@ -137,6 +143,7 @@ export class ImportService {
         .filter((candidate) => !shouldSuppressMemory(candidate));
       const rejected = rejectedByNormalization + (candidates.length - filtered.length);
       if (mode === "dry-run") {
+        const scopeCounts = summarizeScopes(filtered);
         return {
           path: filePath,
           kind,
@@ -148,10 +155,12 @@ export class ImportService {
           rejected,
           rejectedSensitive: 0,
           uncertain: 0,
+          scopeCounts,
         };
       }
 
       const result = await this.container.memoryStore.upsertMany(filtered);
+      const scopeCounts = summarizeScopes(filtered);
       return {
         path: filePath,
         kind,
@@ -163,6 +172,7 @@ export class ImportService {
         rejected,
         rejectedSensitive: 0,
         uncertain: 0,
+        scopeCounts,
       };
     } catch (error) {
       return {
@@ -176,6 +186,7 @@ export class ImportService {
         rejected: 0,
         rejectedSensitive: 0,
         uncertain: 0,
+        scopeCounts: {},
         error: error instanceof Error ? error.message : String(error),
       };
     }
@@ -205,6 +216,16 @@ export class ImportService {
       .map((line) => JSON.parse(line) as Record<string, unknown>);
     return normalizeTurnsIntoMemories(turns, this.container);
   }
+}
+
+function summarizeScopes(records: MemoryRecord[]): Partial<Record<MemoryScope, number>> {
+  return records.reduce<Partial<Record<MemoryScope, number>>>((summary, record) => {
+    const scope = record.scope;
+    if (scope) {
+      summary[scope] = (summary[scope] ?? 0) + 1;
+    }
+    return summary;
+  }, {});
 }
 
 function applyImportScopeMapping(

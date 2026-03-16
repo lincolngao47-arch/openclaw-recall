@@ -8,10 +8,15 @@ import { createEmbeddingProvider } from "../src/memory/EmbeddingProvider.js";
 import { cleanupTempDir, createTempDir } from "./helpers/temp-db.js";
 import type { MemoryRecord } from "../src/types/domain.js";
 
-const embeddingProvider = createEmbeddingProvider({
+const baseConfig = {
   enabled: true,
   storageDir: "",
   databasePath: "",
+  identity: {
+    mode: "local",
+    backendType: "local",
+    verifyOnStartup: true,
+  },
   embedding: {
     provider: "local",
     model: "text-embedding-3-small",
@@ -30,6 +35,10 @@ const embeddingProvider = createEmbeddingProvider({
     episodicTtlDays: 14,
     sessionStateTtlDays: 21,
   },
+  retrieval: {
+    mode: "hybrid",
+    fallbackToKeyword: true,
+  },
   compression: {
     recentTurns: 6,
     contextBudget: 2400,
@@ -43,6 +52,20 @@ const embeddingProvider = createEmbeddingProvider({
   inspect: {
     httpPath: "/plugins/openclaw-recall",
   },
+  imports: {
+    enabled: true,
+    defaultRoots: [],
+    maxFiles: 100,
+    maxConcurrency: 1,
+  },
+  exports: {
+    directory: ".exports",
+    defaultFormat: "json",
+  },
+} as const;
+
+const embeddingProvider = createEmbeddingProvider({
+  ...baseConfig,
 });
 
 test("merges semantically similar memories instead of duplicating rows", async () => {
@@ -202,6 +225,96 @@ test("supports prune-noise dry-run without mutating active memories", async () =
     assert.equal(result.pruned, 1);
     assert.equal(result.dryRun, true);
     assert.equal(active.length, 1);
+  } finally {
+    await cleanupTempDir(tempDir);
+  }
+});
+
+test("reindex refreshes scope metadata and fingerprints without deleting good memory", async () => {
+  const tempDir = await createTempDir("openclaw-memory-store-");
+  try {
+    const store = new MemoryStore(
+      new PluginDatabase(path.join(tempDir, "memory.sqlite")),
+      embeddingProvider,
+      0.92,
+      {
+        ...baseConfig,
+        storageDir: tempDir,
+        databasePath: path.join(tempDir, "memory.sqlite"),
+        identity: {
+          ...baseConfig.identity,
+          mode: "shared",
+          verifyOnStartup: true,
+          userScope: "felix",
+          workspaceScope: "workspace-a",
+          sharedScope: "team-a",
+        },
+      },
+    );
+
+    await store.upsertMany([
+      {
+        ...memory({
+          kind: "semantic",
+          summary: "Project context: current workspace is Recall v1.1.",
+          memoryGroup: "semantic:project",
+        }),
+        scope: "private",
+        scopeKey: undefined,
+        fingerprint: "old-fingerprint",
+      },
+    ]);
+
+    const result = await store.reindex();
+    const active = await store.listActive();
+    assert.equal(result.changed, 1);
+    assert.equal(active.length, 1);
+    assert.equal(active[0].scope, "shared");
+    assert.equal(active[0].scopeKey, "shared:team-a");
+    assert.notEqual(active[0].fingerprint, "old-fingerprint");
+  } finally {
+    await cleanupTempDir(tempDir);
+  }
+});
+
+test("compact preserves superseded memory rows while shrinking stale content", async () => {
+  const tempDir = await createTempDir("openclaw-memory-store-");
+  try {
+    const store = new MemoryStore(
+      new PluginDatabase(path.join(tempDir, "memory.sqlite")),
+      embeddingProvider,
+      0.92,
+    );
+
+    const longText = "x".repeat(600);
+    await store.upsertMany([
+      {
+        ...memory({
+          kind: "preference",
+          summary: "User prefers detailed reports.",
+          memoryGroup: "preference:detail",
+        }),
+        content: longText,
+      },
+    ]);
+    const newer = {
+      ...memory({
+        kind: "preference",
+        summary: "User prefers concise reports.",
+        memoryGroup: "preference:detail",
+      }),
+      content: "short",
+    };
+    await store.upsertMany([newer]);
+
+    const beforeAll = await store.listAll();
+    assert.equal(beforeAll.length, 2);
+    const compact = await store.compact();
+    const afterAll = await store.listAll();
+    const superseded = afterAll.find((item) => item.id !== newer.id && item.active === false);
+    assert.equal(compact.compacted, 1);
+    assert(superseded);
+    assert(superseded.content.length < longText.length);
   } finally {
     await cleanupTempDir(tempDir);
   }

@@ -10,7 +10,7 @@ import { validateResolvedConfig } from "../../config/validation.js";
 import { resolvePluginPaths } from "../../storage/paths.js";
 import { readJsonFile } from "../../shared/fileStore.js";
 import { explainSuppression } from "../../memory/MemoryRanker.js";
-import type { PruneReport } from "../../types/domain.js";
+import type { MaintenanceReport, PruneReport } from "../../types/domain.js";
 
 export function registerDoctorCommands(program: Command): void {
   addJsonFlag(
@@ -46,7 +46,10 @@ export function registerDoctorCommands(program: Command): void {
       const sqliteHealthy = isSqliteHealthy(container.database);
       const envOverrides = listPluginEnvOverrides();
       const latestPrune = await readJsonFile<PruneReport | null>(pluginPaths.latestPrunePath, null);
+      const latestReindex = await readJsonFile<MaintenanceReport | null>(pluginPaths.latestReindexPath, null);
+      const latestCompact = await readJsonFile<MaintenanceReport | null>(pluginPaths.latestCompactPath, null);
       const noisyActiveMemories = memories.filter((memory) => explainSuppression(memory).length > 0);
+      const hygiene = await container.memoryStore.hygieneSummary();
       const promptLayers = Array.isArray(latestProfile?.details?.promptLayers)
         ? (latestProfile?.details?.promptLayers as Array<Record<string, unknown>>)
         : [];
@@ -118,7 +121,7 @@ export function registerDoctorCommands(program: Command): void {
             name: "import system",
             status: resolved.imports.enabled ? "pass" : "warn",
             detail: latestImport
-              ? `enabled=${resolved.imports.enabled}, latest=${latestImport.status}, imported=${latestImport.imported}, rejected=${latestImport.rejectedNoise}`
+              ? `enabled=${resolved.imports.enabled}, latest=${latestImport.status}, imported=${latestImport.imported}, rejected=${latestImport.rejectedNoise}, scopes=${JSON.stringify(latestImport.scopeCounts ?? {})}`
               : `enabled=${resolved.imports.enabled}, no import job recorded yet`,
           },
           {
@@ -180,17 +183,17 @@ export function registerDoctorCommands(program: Command): void {
           {
             name: "memory hygiene",
             status:
-              noisyActiveMemories.length === 0
+              hygiene.score >= 85
                 ? "pass"
                 : latestPrune?.dryRun === false && (latestPrune.pruned ?? 0) > 0
                   ? "warn"
                   : "warn",
             detail:
-              noisyActiveMemories.length === 0
-                ? "No active memories currently match suppression rules"
+              hygiene.score >= 85
+                ? `hygiene=${hygiene.score}, noisy=${hygiene.noisyActiveCount}, supersededStale=${hygiene.supersededStaleCount}, duplicates=${hygiene.duplicateClusters}`
                 : latestPrune
-                  ? `Detected ${noisyActiveMemories.length} active noisy memories; latest prune=${latestPrune.createdAt} (dryRun=${latestPrune.dryRun}, pruned=${latestPrune.pruned})`
-                  : `Detected ${noisyActiveMemories.length} active noisy memories; run \`openclaw-recall memory prune-noise --dry-run\` first`,
+                  ? `hygiene=${hygiene.score}, noisy=${hygiene.noisyActiveCount}, supersededStale=${hygiene.supersededStaleCount}, duplicates=${hygiene.duplicateClusters}; latest prune=${latestPrune.createdAt} (dryRun=${latestPrune.dryRun}, pruned=${latestPrune.pruned}), reindex=${latestReindex?.createdAt ?? "none"}, compact=${latestCompact?.createdAt ?? "none"}`
+                  : `hygiene=${hygiene.score}, noisy=${hygiene.noisyActiveCount}, supersededStale=${hygiene.supersededStaleCount}, duplicates=${hygiene.duplicateClusters}; run \`openclaw-recall memory prune-noise --dry-run\` first`,
           },
           {
             name: "retrieval pipeline",

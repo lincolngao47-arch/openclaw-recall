@@ -292,3 +292,51 @@ test("shared and private scope boundaries are enforced during retrieval", async 
     await cleanupTempDir(tempDir);
   }
 });
+
+test("memory explain exposes retrieval contributions and suppressed noisy rows", async () => {
+  const tempDir = await createTempDir("openclaw-recall-explain-");
+  try {
+    const config = buildConfig({
+      storageDir: tempDir,
+      databasePath: path.join(tempDir, "memory.sqlite"),
+      identity: {
+        ...defaultPluginConfig.identity,
+        mode: "shared",
+        sharedScope: "team-alpha",
+        workspaceScope: "workspace-a",
+        userScope: "felix",
+      },
+    });
+    const embeddings = createEmbeddingProvider(config);
+    const store = new MemoryStore(new PluginDatabase(config.databasePath), embeddings, 0.92, config);
+    await store.upsertMany([
+      buildMemory("User prefers Chinese responses.", {
+        scope: "private",
+        scopeKey: "user:felix",
+        topics: ["chinese", "responses"],
+      }),
+      buildMemory("Workspace project context is Recall v1.1.", {
+        kind: "semantic",
+        scope: "workspace",
+        scopeKey: "workspace:workspace-a",
+        topics: ["recall", "project", "v1.1"],
+      }),
+      buildMemory('Sender (untrusted metadata): {"label":"openclaw-control-ui"}', {
+        kind: "session_state",
+        scope: "session",
+        scopeKey: "session:s1",
+        topics: ["sender", "metadata"],
+      }),
+    ]);
+    const retriever = new MemoryRetriever(store, new MemoryRanker(), embeddings, 4, config);
+    const explained = await retriever.explainDetailed("Recall 中文 project", 8, { sessionId: "s1" });
+    assert.equal(explained.retrievalMode, "hybrid");
+    assert(explained.selected.length >= 2);
+    assert(explained.keywordContribution >= 0);
+    assert(explained.semanticContribution >= 0);
+    assert(explained.selected.every((memory) => typeof memory.scoreBreakdown?.finalScore === "number"));
+    assert(explained.suppressed.some((entry) => /metadata/.test(entry.summary)));
+  } finally {
+    await cleanupTempDir(tempDir);
+  }
+});

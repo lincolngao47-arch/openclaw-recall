@@ -220,6 +220,7 @@ export interface ImportFileReport {
   rejected: number;
   rejectedSensitive: number;
   uncertain: number;
+  scopeCounts?: Partial<Record<MemoryScope, number>>;
   error?: string;
 }
 
@@ -243,6 +244,7 @@ export interface ImportJobReport {
   notes: string[];
   scopeMapping?: Record<string, MemoryScope>;
   snapshotPath?: string;
+  scopeCounts?: Partial<Record<MemoryScope, number>>;
 }
 
 export interface ExportReport {
@@ -263,6 +265,18 @@ export interface PruneReport {
   scanned: number;
   pruned: number;
   ids: string[];
+  notes: string[];
+}
+
+export interface MaintenanceReport {
+  operation: "reindex" | "compact";
+  reportId: string;
+  createdAt: string;
+  dryRun: boolean;
+  scanned: number;
+  changed: number;
+  ids: string[];
+  hygieneScore: number;
   notes: string[];
 }
 

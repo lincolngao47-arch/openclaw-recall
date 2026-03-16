@@ -38,13 +38,19 @@ openclaw-recall memory explain "你记得我的偏好吗？"
 openclaw-recall memory inspect <id>
 openclaw-recall memory prune-noise --dry-run
 openclaw-recall memory prune-noise
+openclaw-recall memory reindex --dry-run
+openclaw-recall memory reindex
+openclaw-recall memory compact --dry-run
+openclaw-recall memory compact
 openclaw-recall session inspect <sessionId>
 ```
 
 What to look for:
 
 - `memory inspect` should show `active`, `supersededAt`, and `supersededBy` when a preference or fact was replaced
+- `memory inspect` should show `scope`, `scopeKey`, and `backend`
 - `suppressedReasons` should only appear on noisy rows in debug paths
+- `memory explain` should show `retrievalMode`, `keywordContribution`, `semanticContribution`, and selected/suppressed rows
 - normal chat replies should stay clean; scaffold/debug detail belongs in inspect commands only
 
 ## Debugging profile and compression behavior
@@ -92,9 +98,15 @@ If earlier versions stored wrapper text, metadata, or scaffold fragments, prune 
 ```bash
 openclaw-recall memory prune-noise --dry-run
 openclaw-recall memory prune-noise
+openclaw-recall memory reindex --dry-run
+openclaw-recall memory compact --dry-run
 ```
 
-The dry-run output reports how many rows would be deactivated before any change is applied.
+The dry-run output reports how many rows would be affected before any change is applied.
+
+- `prune-noise` deactivates noisy rows
+- `reindex` refreshes fingerprint, scope defaults, and suppression metadata
+- `compact` shrinks inactive/superseded/expired rows without deleting inspectable history
 
 ## Backup and export
 
@@ -105,6 +117,7 @@ openclaw-recall export session --session <sessionId>
 ```
 
 The latest export path is surfaced in `openclaw-recall status`.
+The export report also includes `scopeCounts`, so you can see whether data is staying `private`, `workspace`, `shared`, or `session`.
 
 ## Recovery
 

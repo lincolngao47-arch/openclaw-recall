@@ -1,7 +1,7 @@
 import { cosineSimilarity } from "./EmbeddingProvider.js";
-import { tokenize } from "../shared/text.js";
 import { explainSuppressedMemory, hasStablePreferenceSignal, shouldSuppressMemory } from "../shared/safety.js";
 import { MemoryRecord, RetrievalMode } from "../types/domain.js";
+import { keywordMatchCount } from "./hygiene.js";
 
 export class MemoryRanker {
   rank(
@@ -10,14 +10,12 @@ export class MemoryRanker {
     queryEmbedding: number[],
     retrievalMode: RetrievalMode,
   ): MemoryRecord[] {
-    const queryTokens = new Set(tokenize(query));
     const now = Date.now();
 
     return [...memories]
       .filter((memory) => !shouldSuppressMemory(memory))
       .map((memory) => {
-        const overlap = memory.topics.filter((topic) => queryTokens.has(topic)).length;
-        const entityOverlap = memory.entityKeys.filter((entity) => queryTokens.has(entity.toLowerCase())).length;
+        const { topicOverlap: overlap, entityOverlap } = keywordMatchCount(query, memory);
         const vectorScore =
           retrievalMode !== "keyword"
             ? Math.max(0, cosineSimilarity(queryEmbedding, memory.embedding ?? []))

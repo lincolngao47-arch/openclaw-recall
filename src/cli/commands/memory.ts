@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import { explainSuppression } from "../../memory/MemoryRanker.js";
 import { resolvePluginPaths } from "../../storage/paths.js";
 import { writeJsonFile } from "../../shared/fileStore.js";
-import type { PruneReport } from "../../types/domain.js";
+import type { MaintenanceReport, PruneReport } from "../../types/domain.js";
 import { addJsonFlag, createCliContainer, printOutput } from "../shared.js";
 
 export function registerMemoryCommands(program: Command): void {
@@ -62,7 +62,7 @@ export function registerMemoryCommands(program: Command): void {
       .option("--limit <n>", "Maximum records", "8")
       .action(async function action(query: string) {
         const { container } = await createCliContainer();
-        const result = await container.memoryRetriever.retrieveWithContext(query, Number(this.opts().limit), {
+        const result = await container.memoryRetriever.explainDetailed(query, Number(this.opts().limit), {
           sessionId: this.opts().session,
         });
         printOutput(this, result);
@@ -89,6 +89,58 @@ export function registerMemoryCommands(program: Command): void {
             : ["Suppressed/noisy memories were deactivated rather than deleted."],
         };
         await writeJsonFile(resolvePluginPaths().latestPrunePath, report);
+        printOutput(this, report);
+      }),
+  );
+
+  addJsonFlag(
+    memory
+      .command("reindex")
+      .description("Recompute fingerprints, default scopes, and suppression metadata without changing user text")
+      .option("--dry-run", "Preview changes without mutating stored data")
+      .action(async function action() {
+        const { container, pluginPaths } = await createCliContainer();
+        const result = await container.memoryStore.reindex({ dryRun: this.opts().dryRun === true });
+        const report: MaintenanceReport = {
+          operation: "reindex",
+          reportId: crypto.randomUUID(),
+          createdAt: new Date().toISOString(),
+          dryRun: this.opts().dryRun === true,
+          scanned: result.scanned,
+          changed: result.changed,
+          ids: result.ids,
+          hygieneScore: result.hygiene.score,
+          notes: result.dryRun
+            ? ["Dry-run only; no stored memories were mutated."]
+            : ["Fingerprints, scope defaults, and suppression metadata were refreshed."],
+        };
+        await writeJsonFile(pluginPaths.latestReindexPath, report);
+        printOutput(this, report);
+      }),
+  );
+
+  addJsonFlag(
+    memory
+      .command("compact")
+      .description("Compact inactive, superseded, or expired memories without deleting inspectable history")
+      .option("--dry-run", "Preview compaction changes without mutating stored data")
+      .action(async function action() {
+        const { container, pluginPaths } = await createCliContainer();
+        const result = await container.memoryStore.compact({ dryRun: this.opts().dryRun === true });
+        const report: MaintenanceReport = {
+          operation: "compact",
+          reportId: crypto.randomUUID(),
+          createdAt: new Date().toISOString(),
+          dryRun: this.opts().dryRun === true,
+          scanned: result.scanned,
+          changed: result.compacted,
+          ids: result.ids,
+          hygieneScore: result.hygiene.score,
+          notes: result.dryRun
+            ? ["Dry-run only; no memory rows were compacted."]
+            : ["Inactive, superseded, or expired memories were compacted in place for long-term hygiene."],
+        };
+        await writeJsonFile(pluginPaths.latestCompactPath, report);
         printOutput(this, report);
       }),
   );

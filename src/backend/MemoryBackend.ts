@@ -38,6 +38,7 @@ export type MemorySpaceSummary = {
 export interface MemoryBackend {
   readonly mode: MemoryBackendMode;
   readonly backendType: string;
+  listAllMemory(): Promise<MemoryRecord[]>;
   listActive(): Promise<MemoryRecord[]>;
   searchMemory(query?: string): Promise<MemoryRecord[]>;
   getMemory(id: string): Promise<MemoryRecord | null>;

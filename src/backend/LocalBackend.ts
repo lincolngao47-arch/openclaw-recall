@@ -21,7 +21,7 @@ export class LocalBackend implements MemoryBackend {
     private readonly dedupeSimilarity: number,
   ) {}
 
-  async listActive(): Promise<MemoryRecord[]> {
+  async listAllMemory(): Promise<MemoryRecord[]> {
     const rows = this.database.connection
       .prepare(`
         SELECT *
@@ -29,15 +29,24 @@ export class LocalBackend implements MemoryBackend {
         ORDER BY last_seen_at DESC, salience DESC
       `)
       .all() as MemoryRow[];
+    return rows.map((row) => this.fromRow(row));
+  }
 
-    return rows
-      .map((row) => this.fromRow(row))
+  async listActive(): Promise<MemoryRecord[]> {
+    return (await this.listAllMemory())
       .filter((memory) => memory.active !== false && !isExpired(memory) && !isEvicted(memory));
   }
 
-  async searchMemory(): Promise<MemoryRecord[]> {
-    const memories = await this.listActive();
-    return memories.filter((memory) => !shouldSuppressMemory(memory));
+  async searchMemory(query?: string): Promise<MemoryRecord[]> {
+    const memories = (await this.listActive()).filter((memory) => !shouldSuppressMemory(memory));
+    if (!query?.trim()) {
+      return memories;
+    }
+    const queryTokens = new Set(query.toLowerCase().split(/\s+/).filter(Boolean));
+    return memories.filter((memory) => {
+      const haystack = `${memory.summary} ${memory.content} ${memory.topics.join(" ")} ${memory.entityKeys.join(" ")}`.toLowerCase();
+      return Array.from(queryTokens).some((token) => haystack.includes(token));
+    });
   }
 
   async getMemory(id: string): Promise<MemoryRecord | null> {

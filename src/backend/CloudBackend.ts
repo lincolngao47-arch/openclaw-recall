@@ -21,6 +21,10 @@ export class CloudBackend implements MemoryBackend {
     this.client = new RecallHttpBackendClient(config);
   }
 
+  async listAllMemory(): Promise<MemoryRecord[]> {
+    return await this.client.listAllMemory();
+  }
+
   async listActive(): Promise<MemoryRecord[]> {
     return await this.client.listActive();
   }

@@ -32,6 +32,10 @@ export class RecallHttpBackendClient {
     }
   }
 
+  async listAllMemory(): Promise<MemoryRecord[]> {
+    return await this.request<MemoryRecord[]>("GET", this.spacePath("/memories?includeInactive=1"));
+  }
+
   async listActive(): Promise<MemoryRecord[]> {
     return await this.request<MemoryRecord[]>("GET", this.spacePath("/memories"));
   }
@@ -149,7 +153,8 @@ export async function startRecallHttpBackendServer(params: {
       const records = await readSpace(filePath);
 
       if (req.method === "GET" && !maybeId) {
-        reply(res, 200, records.filter((record) => record.active !== false));
+        const includeInactive = url.searchParams.get("includeInactive") === "1";
+        reply(res, 200, includeInactive ? records : records.filter((record) => record.active !== false));
         return;
       }
       if (req.method === "GET" && maybeId === "search") {

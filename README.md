@@ -134,6 +134,10 @@ openclaw-recall memory search "<query>"
 openclaw-recall memory explain "<query>"
 openclaw-recall memory prune-noise --dry-run
 openclaw-recall memory prune-noise
+openclaw-recall memory reindex --dry-run
+openclaw-recall memory reindex
+openclaw-recall memory compact --dry-run
+openclaw-recall memory compact
 openclaw-recall profile list
 openclaw-recall profile inspect <runId>
 openclaw-recall session list
@@ -196,6 +200,8 @@ If you already have old noisy rows, use:
 ```bash
 openclaw-recall memory prune-noise --dry-run
 openclaw-recall memory prune-noise
+openclaw-recall memory reindex --dry-run
+openclaw-recall memory compact --dry-run
 ```
 
 `memory explain`, `memory inspect`, `doctor`, and `status` keep the debug path available without putting those internals in the normal chat response.
@@ -204,8 +210,21 @@ openclaw-recall memory prune-noise
 
 - `noisyActiveMemoryCount`
 - `lastPrune`
+- `lastReindex`
+- `lastCompact`
+- `hygiene`
 - `recentImportStats`
 - `lastExportPath`
+
+`memory explain` now exposes:
+
+- `retrievalMode`
+- selected rows with `finalScore`
+- `keywordContribution`
+- `semanticContribution`
+- suppressed noisy rows and their suppression reasons
+
+That data stays in inspect/debug paths only. Normal chat replies remain clean.
 
 ## Compatibility
 

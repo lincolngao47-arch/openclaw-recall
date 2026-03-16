@@ -2,7 +2,7 @@ import { Command } from "commander";
 import { addJsonFlag, createCliContainer, pluginConfigSources, printOutput } from "../shared.js";
 import { readJsonFile } from "../../shared/fileStore.js";
 import { explainSuppression } from "../../memory/MemoryRanker.js";
-import type { PruneReport } from "../../types/domain.js";
+import type { MaintenanceReport, PruneReport } from "../../types/domain.js";
 
 export function registerStatusCommands(program: Command): void {
   addJsonFlag(
@@ -16,9 +16,12 @@ export function registerStatusCommands(program: Command): void {
       const latestImport = await importService.status();
       const latestExport = await exportService.latest();
       const latestPrune = await readJsonFile<PruneReport | null>(pluginPaths.latestPrunePath, null);
+      const latestReindex = await readJsonFile<MaintenanceReport | null>(pluginPaths.latestReindexPath, null);
+      const latestCompact = await readJsonFile<MaintenanceReport | null>(pluginPaths.latestCompactPath, null);
       const identityStatus = identity.status();
       const backendHealth = await container.memoryStore.pingBackend();
       const memorySpaces = await container.memoryStore.listMemorySpaces();
+      const hygiene = await container.memoryStore.hygieneSummary();
       const noisyCandidates = memories
         .map((memory) => ({ id: memory.id, reasons: explainSuppression(memory) }))
         .filter((entry) => entry.reasons.length > 0);
@@ -64,10 +67,14 @@ export function registerStatusCommands(program: Command): void {
               imported: latestImport.imported,
               skippedDuplicates: latestImport.skippedDuplicates,
               rejectedNoise: latestImport.rejectedNoise,
+              scopeCounts: latestImport.scopeCounts ?? {},
             }
           : null,
         lastExportPath: latestExport?.outputPath ?? null,
         lastPrune: latestPrune,
+        lastReindex: latestReindex,
+        lastCompact: latestCompact,
+        hygiene,
         noisyActiveMemoryCount: noisyCandidates.length,
         scopeCounts,
         lastRecoveryWarning: identityStatus.warnings[0] ?? null,

@@ -83,6 +83,7 @@ Success indicators:
 
 - `memory list` contains preference rows mentioning Felix, Chinese, or concise replies
 - `memory explain` gives ranked retrieval reasons
+- `memory explain` now includes `retrievalMode`, keyword/semantic contribution, selected rows, and suppressed noisy rows
 - `profile list --json` shows at least one run with `promptTokensSource: "exact"`
 - `session inspect` shows tool results with `savedTokens > 0`
 
@@ -91,12 +92,16 @@ Success indicators:
 ```bash
 openclaw-recall memory prune-noise --dry-run
 openclaw-recall memory prune-noise
+openclaw-recall memory reindex --dry-run
+openclaw-recall memory compact --dry-run
 ```
 
 Expected result:
 
 - old metadata/control-ui/heartbeat/scaffold rows are reported before pruning
 - the real prune pass deactivates them instead of silently deleting everything
+- `reindex` refreshes old rows into the current scope/fingerprint/suppression model
+- `compact` keeps stale history inspectable while shrinking oversized inactive rows
 - later `memory explain` results stop surfacing those noisy rows
 
 ## Backup and recovery demo
@@ -127,6 +132,10 @@ openclaw-recall status
   "recentRetrievalCount": 3,
   "recentCompressionSavings": 207,
   "recentMemoryWrites": 0,
+  "hygiene": {
+    "score": 100,
+    "noisyActiveCount": 0
+  },
   "latestProfile": {
     "promptTokensSource": "exact",
     "compressionSavingsSource": "estimated"

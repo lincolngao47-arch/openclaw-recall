@@ -34,6 +34,12 @@ export function registerProfileCommands(program: Command): void {
                 ...profile,
                 summary: {
                   prompt: `${profile.promptTokens} (${profile.promptTokensSource})`,
+                  retrieval: {
+                    mode: profile.retrievalMode,
+                    count: profile.retrievalCount,
+                    keywordContribution: profile.keywordContribution,
+                    semanticContribution: profile.semanticContribution,
+                  },
                   memory: {
                     injected: profile.memoryInjected,
                     candidates: profile.memoryCandidates,

@@ -13,6 +13,7 @@ import type {
   MemoryWriteResult,
 } from "../backend/MemoryBackend.js";
 import { ReconnectBackend } from "../backend/ReconnectBackend.js";
+import { analyzeMemoryHygiene, buildCompactedMemory, buildReindexedMemory, type HygieneSummary } from "./hygiene.js";
 
 export class MemoryStore {
   private readonly backend: MemoryBackend;
@@ -24,6 +25,10 @@ export class MemoryStore {
     private readonly config?: ResolvedPluginConfig,
   ) {
     this.backend = createMemoryBackend(database, embeddings, dedupeSimilarity, config);
+  }
+
+  async listAll(): Promise<MemoryRecord[]> {
+    return await this.backend.listAllMemory();
   }
 
   async listActive(): Promise<MemoryRecord[]> {
@@ -78,6 +83,89 @@ export class MemoryStore {
 
   async listMemorySpaces(): Promise<MemorySpaceSummary[]> {
     return await this.backend.listMemorySpaces();
+  }
+
+  async reindex(options?: { dryRun?: boolean }): Promise<{
+    scanned: number;
+    changed: number;
+    ids: string[];
+    dryRun: boolean;
+    hygiene: HygieneSummary;
+  }> {
+    const all = await this.listAll();
+    const changed: string[] = [];
+    for (const memory of all) {
+      if (!this.config) {
+        continue;
+      }
+      const next = buildReindexedMemory(memory, this.config);
+      if (
+        next.fingerprint !== memory.fingerprint ||
+        next.scope !== memory.scope ||
+        next.scopeKey !== memory.scopeKey ||
+        JSON.stringify(next.suppressedReasons ?? []) !== JSON.stringify(memory.suppressedReasons ?? [])
+      ) {
+        changed.push(memory.id);
+        if (!options?.dryRun) {
+          await this.backend.updateMemory(memory.id, {
+            fingerprint: next.fingerprint,
+            scope: next.scope,
+            scopeKey: next.scopeKey,
+            suppressedReasons: next.suppressedReasons,
+          });
+        }
+      }
+    }
+    const latest = options?.dryRun ? all : await this.listAll();
+    return {
+      scanned: all.length,
+      changed: changed.length,
+      ids: changed,
+      dryRun: options?.dryRun === true,
+      hygiene: analyzeMemoryHygiene(latest),
+    };
+  }
+
+  async compact(options?: { dryRun?: boolean }): Promise<{
+    scanned: number;
+    compacted: number;
+    ids: string[];
+    dryRun: boolean;
+    hygiene: HygieneSummary;
+  }> {
+    const all = await this.listAll();
+    const compacted: string[] = [];
+    for (const memory of all) {
+      const next = buildCompactedMemory(memory);
+      if (
+        next.content !== memory.content ||
+        JSON.stringify(next.topics) !== JSON.stringify(memory.topics) ||
+        JSON.stringify(next.entityKeys) !== JSON.stringify(memory.entityKeys) ||
+        JSON.stringify(next.suppressedReasons ?? []) !== JSON.stringify(memory.suppressedReasons ?? [])
+      ) {
+        compacted.push(memory.id);
+        if (!options?.dryRun) {
+          await this.backend.updateMemory(memory.id, {
+            content: next.content,
+            topics: next.topics,
+            entityKeys: next.entityKeys,
+            suppressedReasons: next.suppressedReasons,
+          });
+        }
+      }
+    }
+    const latest = options?.dryRun ? all : await this.listAll();
+    return {
+      scanned: all.length,
+      compacted: compacted.length,
+      ids: compacted,
+      dryRun: options?.dryRun === true,
+      hygiene: analyzeMemoryHygiene(latest),
+    };
+  }
+
+  async hygieneSummary(): Promise<HygieneSummary> {
+    return analyzeMemoryHygiene(await this.listAll());
   }
 
   async touch(memories: MemoryRecord[]): Promise<void> {
