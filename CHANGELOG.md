@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.1
 
 - hardened memory quality with stricter write-time rejection for metadata, wrappers, scaffold fragments, and low-value emotional noise
 - strengthened retrieval suppression and ranking so stable user preferences outrank polluted or low-value records

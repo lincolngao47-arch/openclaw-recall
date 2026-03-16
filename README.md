@@ -4,6 +4,8 @@ Persistent memory, context compression, and profile visibility for OpenClaw.
 
 OpenClaw Recall is an enhancement plugin for OpenClaw. It adds automatic memory write, cross-session recall, prompt compression, tool output compaction, and inspectable profile data without replacing OpenClaw's runtime or product shell.
 
+Current stable version: `1.0.1`.
+
 It now supports two persistent identity paths:
 
 - `local` mode: durable memory stays on the current OpenClaw home
@@ -199,7 +201,7 @@ openclaw-recall memory prune-noise
 
 ## Compatibility
 
-Verified for `1.0.0`:
+Verified for `1.0.1`:
 
 - Node.js `24.10.0` and `24.12.0`
 - OpenClaw `2026.3.13`

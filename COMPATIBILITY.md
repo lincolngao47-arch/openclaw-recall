@@ -2,7 +2,7 @@
 
 ## Release target
 
-This matrix applies to `1.0.0`.
+This matrix applies to `1.0.1`.
 
 ## Verified versions
 
@@ -24,16 +24,16 @@ This matrix applies to `1.0.0`.
   - prompt token usage can be `exact` when OpenClaw or the provider returns usage metadata
   - verified in embedded integration, source install, and tarball install flows
 
-### Supported with partial verification
+### Supported with partial verification in 1.0.1
 
 - OpenAI-compatible embeddings via `embedding.provider=openai`
   - configuration, doctor, and config validation are supported
   - automated smoke currently covers local hashed embeddings by default instead of a live embedding API
 
-### Not yet release-verified
+### Not yet release-verified in 1.0.1
 
 - non-OpenAI runtime provider paths
-  - no claim of full smoke coverage in 1.0.0
+  - no claim of full smoke coverage in 1.0.1
 
 ## Verified install paths
 
@@ -56,7 +56,7 @@ This matrix applies to `1.0.0`.
 - memory conflict resolution is still rule-based
   - workaround: inspect memory rows with `memory explain` and `memory inspect` when tuning behavior
 
-## Evidence used for 1.0.0
+## Evidence used for 1.0.1
 
 - `npm run build`
 - `npm run test:unit`

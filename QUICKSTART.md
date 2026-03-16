@@ -2,6 +2,8 @@
 
 Install OpenClaw Recall, prove the hooks are active, and verify memory, recall, compression, and profile output with the fewest moving parts.
 
+Current stable version: `1.0.1`.
+
 ## Prerequisites
 
 - Node.js 24+

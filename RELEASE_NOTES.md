@@ -1,29 +1,35 @@
 # Release Notes
 
-## OpenClaw Recall v1.0.0
+## OpenClaw Recall v1.0.1
 
-OpenClaw Recall is the first stable release of the plugin formerly developed as `openclaw-memory-plugin`.
+`1.0.1` is a patch release. It does not add a new product surface or change the plugin boundary. It hardens the existing plugin in the areas that most affect long-term daily use: memory quality, output safety, maintenance tooling, and release confidence.
 
-### What it is
+### Why this is a patch
 
-An OpenClaw enhancement plugin that adds persistent memory, context compression, tool output compaction, and inspectable profiling without replacing OpenClaw itself.
+- memory quality hardening
+- output safety fixes
+- prune / hygiene tooling
+- operational polish
+- compatibility clarification
+- release confidence improvements
 
-### Why you would install it
+### Fixes
 
-- stable preferences survive across sessions
-- prompt construction wastes fewer tokens
-- large tool payloads stop bloating the prompt path
-- memory and compression behavior become inspectable
+- tightened write-time rejection for metadata, heartbeat, wrapper text, debug annotations, scaffold fragments, and low-value emotional noise
+- improved retrieval suppression so noisy stored rows do not dominate normal recall
+- improved preference extraction for directness, execution-oriented collaboration, structured reporting, Chinese/English preference, and concise/detailed preference changes
+- improved conflict supersede behavior for the most common preference and project-focus updates
+- added `memory prune-noise --dry-run` and persisted prune reports
+- extended `doctor`, `status`, and `profile inspect` with hygiene and maintenance visibility
+- cleaned up verified / supported / partial compatibility wording
 
-### Core capabilities
+### User-visible benefits
 
-- automatic memory write for `preference`, `semantic`, `episodic`, and `session_state`
-- cross-session memory retrieval before prompt build
-- layered context compression with budget enforcement
-- tool output compaction with saved-token reporting
-- operator CLI for doctor, status, memory, profile, session, and config inspection
-- plugin inspect routes inside OpenClaw
-- memory hygiene guardrails that reject metadata noise and keep internal scaffold out of normal answers
+- fewer dirty memories get stored
+- fewer noisy recalls show up later
+- normal answers stay cleaner and less likely to leak internal scaffold
+- operator debugging is easier through `doctor`, `status`, `memory inspect`, and `profile inspect`
+- install, tarball, and clean-consumer confidence is higher
 
 ### Install
 
