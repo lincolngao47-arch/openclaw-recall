@@ -15,6 +15,7 @@
 
 ### Fixes
 
+- moved the npm package to the scoped public package name `@felix201209/openclaw-recall`
 - tightened write-time rejection for metadata, heartbeat, wrapper text, debug annotations, scaffold fragments, and low-value emotional noise
 - improved retrieval suppression so noisy stored rows do not dominate normal recall
 - improved preference extraction for directness, execution-oriented collaboration, structured reporting, Chinese/English preference, and concise/detailed preference changes
@@ -34,8 +35,8 @@
 ### Install
 
 ```bash
-npm install openclaw-recall
-openclaw plugins install --link ./node_modules/openclaw-recall
+npm install @felix201209/openclaw-recall
+openclaw plugins install --link ./node_modules/@felix201209/openclaw-recall
 openclaw plugins info openclaw-recall
 openclaw-recall doctor
 openclaw-recall status

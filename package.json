@@ -1,5 +1,5 @@
 {
-  "name": "openclaw-recall",
+  "name": "@felix201209/openclaw-recall",
   "version": "1.0.1",
   "description": "Persistent memory, context compression, and profile visibility for OpenClaw.",
   "type": "module",
@@ -67,7 +67,8 @@
     "test": "npm run test:unit && npm run test:integration && npm run test:install",
     "smoke": "npm run check && npm run build && npm run test",
     "verify": "npm run smoke && npm run release:build && npm run test:tarball:sanity && npm run test:tarball",
-    "release:build": "npm run build && mkdir -p .release && npm pack --pack-destination ./.release"
+    "release:build": "npm run build && mkdir -p .release && rm -f ./.release/*.tgz && npm pack --pack-destination ./.release",
+    "release:publish": "npm publish --access public"
   },
   "keywords": [
     "openclaw",
@@ -81,6 +82,9 @@
   ],
   "author": "Felix",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=24.0.0"
   },

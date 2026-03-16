@@ -2,6 +2,7 @@
 
 ## 1.0.1
 
+- moved the npm package to the scoped name `@felix201209/openclaw-recall` while keeping the plugin id and operator CLI as `openclaw-recall`
 - hardened memory quality with stricter write-time rejection for metadata, wrappers, scaffold fragments, and low-value emotional noise
 - strengthened retrieval suppression and ranking so stable user preferences outrank polluted or low-value records
 - added preference/fact supersede coverage for common Chinese/English and concise/detailed preference changes

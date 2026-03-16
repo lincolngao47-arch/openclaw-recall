@@ -36,7 +36,7 @@ export function registerDoctorCommands(program: Command): void {
         fs.existsSync(path.join(packageRoot, "dist", "src", "plugin", "index.js")) &&
         fs.existsSync(path.join(packageRoot, "dist", "src", "cli", "index.js"));
       const manifestValid =
-        packageJson?.name === "openclaw-recall" &&
+        packageJson?.name === "@felix201209/openclaw-recall" &&
         pluginManifest?.id === "openclaw-recall" &&
         typeof packageJson?.version === "string" &&
         packageJson.version === pluginManifest?.version;

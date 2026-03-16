@@ -53,7 +53,7 @@ const packageJson = JSON.parse(
   }),
 ) as { name?: string; version?: string; files?: string[] };
 
-assert.equal(packageJson.name, "openclaw-recall");
+assert.equal(packageJson.name, "@felix201209/openclaw-recall");
 assert.ok(typeof packageJson.version === "string" && packageJson.version.length > 0);
 
 process.stdout.write(
@@ -76,7 +76,11 @@ function findLatestTarball(releaseDir: string): string {
   const entries = fs
     .readdirSync(releaseDir)
     .filter((entry) => entry.endsWith(".tgz"))
-    .sort();
+    .map((entry) => ({
+      entry,
+      mtimeMs: fs.statSync(path.join(releaseDir, entry)).mtimeMs,
+    }))
+    .sort((a, b) => a.mtimeMs - b.mtimeMs);
   assert(entries.length > 0, `no tarball found in ${releaseDir}`);
-  return path.join(releaseDir, entries.at(-1)!);
+  return path.join(releaseDir, entries.at(-1)!.entry);
 }

@@ -24,8 +24,8 @@ openclaw plugins install --link /path/to/openclaw-recall
 If you are testing a release tarball instead of a source checkout:
 
 ```bash
-npm install ./openclaw-recall-<version>.tgz
-openclaw plugins install --link ./node_modules/openclaw-recall
+npm install ./felix201209-openclaw-recall-<version>.tgz
+openclaw plugins install --link ./node_modules/@felix201209/openclaw-recall
 ```
 
 ## `doctor` says no recent hook activity
