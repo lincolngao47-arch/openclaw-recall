@@ -46,12 +46,7 @@ export class MemoryRetriever {
         )
       : [];
     const visibleBoot = boot.filter((memory) => isMemoryVisible(memory, this.config, options.sessionId));
-    const merged = Array.from(
-      new Map(
-        [...visibleBoot, ...ranked]
-          .map((memory) => [memory.id, memory] as const),
-      ).values(),
-    ).slice(0, limit);
+    const merged = this.mergeCandidates(cleanQuery, ranked, visibleBoot).slice(0, limit);
     await this.store.touch(merged);
     return {
       memories: merged,
@@ -156,5 +151,42 @@ export class MemoryRetriever {
       return "hybrid";
     }
     return this.config.retrieval.fallbackToKeyword ? "keyword" : "embedding";
+  }
+
+  private mergeCandidates(query: string, ranked: MemoryRecord[], boot: MemoryRecord[]): MemoryRecord[] {
+    const merged = new Map<string, MemoryRecord>();
+    for (const memory of [...ranked, ...boot]) {
+      const current = merged.get(memory.id);
+      if (!current || this.candidatePriority(query, memory) > this.candidatePriority(query, current)) {
+        merged.set(memory.id, memory);
+      }
+    }
+    return [...merged.values()].sort((left, right) => this.candidatePriority(query, right) - this.candidatePriority(query, left));
+  }
+
+  private candidatePriority(query: string, memory: MemoryRecord): number {
+    const base =
+      memory.score ??
+      (memory.scoreBreakdown?.finalScore ?? 0) +
+        effectiveImportance(memory) * 0.45 +
+        (memory.kind === "preference" ? 2.2 : memory.kind === "semantic" ? 1.5 : 0.4);
+    const recallIntent = /记得|remember|偏好|preference|项目|project|focus|重点|继续/i.test(query);
+    const recallBoost =
+      recallIntent && memory.kind === "preference"
+        ? 3.2
+        : recallIntent && memory.kind === "semantic"
+          ? 2.4
+          : recallIntent && memory.kind === "session_state"
+            ? 0.8
+            : 0;
+    const scopeBoost =
+      memory.scope === "private"
+        ? 0.8
+        : memory.scope === "workspace"
+          ? 0.55
+          : memory.scope === "shared"
+            ? 0.3
+            : 0;
+    return base + recallBoost + scopeBoost;
   }
 }

@@ -89,6 +89,7 @@ async function main(): Promise<void> {
       const memoryList = JSON.parse(
         execInstalledCli(["memory", "list", "--json"], second.consumerDir, second.openclawHome),
       ) as Array<Record<string, unknown>>;
+      const recallReply = extractText(recall);
 
       assert((doctor.checks ?? []).every((check) => check.status !== "fail"));
       assert.equal(status["backendType"], "recall-http");
@@ -98,6 +99,8 @@ async function main(): Promise<void> {
       assert.ok(Array.isArray(memoryList) && memoryList.length >= 2);
       assert.equal((memoryList[0].scope === "private" || memoryList[0].scope === "workspace" || memoryList[0].scope === "shared" || memoryList[0].scope === "session"), true);
       assert.equal(explain["retrievalMode"], "hybrid");
+      assert.match(recallReply, /Felix|中文|简洁|backend|scope|import quality|项目重点/i);
+      assert.doesNotMatch(recallReply, /没有检索到稳定记忆/);
 
       process.stdout.write(
         `${JSON.stringify(
@@ -105,7 +108,7 @@ async function main(): Promise<void> {
             ok: true,
             tarball: tarballPath,
             endpoint,
-            recallReply: extractText(recall),
+            recallReply,
             memoryCount: status["memoryCount"],
             backendType: status["backendType"],
             memorySpaceId: status["memorySpaceId"],

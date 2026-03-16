@@ -1,5 +1,6 @@
 import { cosineSimilarity, EmbeddingProvider } from "../memory/EmbeddingProvider.js";
 import { shouldSuppressMemory } from "../shared/safety.js";
+import { tokenize } from "../shared/text.js";
 import type { MemoryRecord } from "../types/domain.js";
 import type {
   MemoryBackend,
@@ -42,11 +43,22 @@ export class LocalBackend implements MemoryBackend {
     if (!query?.trim()) {
       return memories;
     }
-    const queryTokens = new Set(query.toLowerCase().split(/\s+/).filter(Boolean));
-    return memories.filter((memory) => {
+    const queryTokens = new Set(tokenize(query));
+    const matched = memories.filter((memory) => {
       const haystack = `${memory.summary} ${memory.content} ${memory.topics.join(" ")} ${memory.entityKeys.join(" ")}`.toLowerCase();
       return Array.from(queryTokens).some((token) => haystack.includes(token));
     });
+    if (matched.length > 0) {
+      return matched;
+    }
+    return memories
+      .slice()
+      .sort((left, right) => {
+        const leftPriority = (left.importance ?? left.salience) + left.salience;
+        const rightPriority = (right.importance ?? right.salience) + right.salience;
+        return rightPriority - leftPriority;
+      })
+      .slice(0, Math.max(8, Math.min(24, memories.length)));
   }
 
   async getMemory(id: string): Promise<MemoryRecord | null> {

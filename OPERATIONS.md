@@ -160,6 +160,7 @@ This clears stored memories, profiles, and tool compactions for the plugin only.
 4. verify with `doctor` and `status`
 
 If you are using the built-in `recall-http` backend, multiple installs can reconnect to the same `memorySpaceId` as long as the endpoint and identity match.
+Near-release `main` verification also covers restored natural-language recall after reconnect/import, not only `doctor` / `status` / `memory explain`.
 
 ### Export debug evidence
 

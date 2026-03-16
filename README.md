@@ -19,6 +19,7 @@ The current `main` branch also includes the first v1.1 backend foundation:
 - `private` / `workspace` / `shared` / `session` scope-aware retrieval rules
 - `semantic` memory now defaults to `workspace`; `shared` remains explicit and opt-in
 - clean-consumer reconnect/import/export roundtrip coverage against the built-in backend
+- restored natural-language recall after reconnect/import now surfaces stable preferences or current project focus, not only inspect evidence
 - lifecycle hygiene signals for stale semantic, superseded, expired, and retrieval-ineligible records
 
 ## Why OpenClaw users install it

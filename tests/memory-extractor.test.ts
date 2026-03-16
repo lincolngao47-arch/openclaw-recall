@@ -72,6 +72,14 @@ test("extracts detail and language preference changes as stable preferences", ()
   assert.ok(result.memories.some((memory) => /more detailed answers/i.test(memory.summary)));
 });
 
+test("extracts project context and focus as semantic workspace-ready memory", () => {
+  const result = extractor().extract(turn("项目上下文：Recall v1.1 主要聚焦 backend、scope 和 import quality。"));
+  assert.ok(result.memories.some((memory) => memory.kind === "semantic"));
+  assert.ok(
+    result.memories.some((memory) => /Project context|Project focus/i.test(memory.summary)),
+  );
+});
+
 function turn(text: string): ChatTurn {
   return {
     id: "turn-1",

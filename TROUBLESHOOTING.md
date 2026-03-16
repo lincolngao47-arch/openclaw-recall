@@ -138,6 +138,8 @@ openclaw-recall memory list
 
 If the report shows high `rejectedNoise`, inspect the source files before retrying.
 
+If restore state looks correct in `doctor` / `status` / `memory explain` but the reply itself is still weak, check whether the imported records landed in `private` scope for a different user. Stable project context should usually survive as `workspace`, while `private` preferences are intentionally not cross-user.
+
 ## I need a backup before changing machines
 
 Run:

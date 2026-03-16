@@ -108,6 +108,7 @@ That additionally checks:
 - built-in `recall-http` backend serve
 - reconnect to the same remote memory space from a clean consumer install
 - import/export restore behavior and restored doctor/status/memory explain output
+- restored natural-language recall quality, not only inspect evidence
 
 ## What success looks like
 
@@ -116,6 +117,7 @@ That additionally checks:
 - `openclaw-recall status` shows non-zero `memoryCount` and `profileCount` after a demo run
 - `openclaw-recall status` also shows `noisyActiveMemoryCount` and the latest prune/import/export metadata
 - `openclaw-recall import status` shows the last import report
+- a restored install can answer with current project focus or stable preferences after reconnect/import
 - `openclaw-recall profile list --json` shows `promptTokensSource: "exact"` on provider paths that return usage
 - `openclaw-recall memory prune-noise --dry-run` shows what would be deactivated before any stored memory changes
 

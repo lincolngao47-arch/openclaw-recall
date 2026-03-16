@@ -123,6 +123,7 @@ Expected result:
 - `status.backendType` is `recall-http`
 - `status.memorySpaceId` matches the configured shared space
 - `availableMemorySpaces` includes the restored space
+- a restored recall-style question now surfaces the strongest surviving project focus or stable preferences
 - `memory explain` shows `retrievalMode`, selected rows, and suppressed rows without leaking debug data into normal chat
 - later `memory explain` results stop surfacing those noisy rows
 

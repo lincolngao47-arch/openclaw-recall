@@ -119,6 +119,7 @@ try {
 
   assert(memories.some((memory) => /Chinese|中文|concise|简洁/i.test(memory.summary)), "expected preference memory to be written");
   assert(explained.some((memory) => /preference/i.test(memory.kind)), "expected preference memory to be retrieved");
+  assert.match(recall.payloads?.map((payload) => payload.text).join("\n") ?? "", /Felix|中文|简洁/i, "expected recall reply to surface restored stable preferences");
   assert(!/TASK STATE|RELEVANT MEMORY|COMPRESSED TOOL OUTPUT|OLDER HISTORY SUMMARY|RECENT TURNS/i.test(recall.payloads?.map((payload) => payload.text).join("\n") ?? ""), "expected recall reply to stay free of scaffold leakage");
   assert(profiles.length >= 2, "expected prompt profiles to be recorded");
   assert.equal(latestProfile?.promptTokensSource, "exact", "expected provider usage to produce exact prompt token counts");

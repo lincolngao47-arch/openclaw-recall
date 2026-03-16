@@ -22,15 +22,19 @@ export class PromptBuilder {
     userMessage: string;
     includeCurrentUserMessage?: boolean;
   }): PromptBuild {
-    const memoryBlock = dedupeMemories(params.memories)
+    const memoryBlock = sortMemoriesForPrompt(params.memories, params.userMessage)
       .map((memory) => `• ${memory.summary}`)
       .join("\n");
+
+    const memoryDigest = buildMemoryDigest(params.memories, params.userMessage);
+    const effectiveMemoryBlock = [memoryDigest, memoryBlock].filter(Boolean).join("\n")
+      .trim();
 
     const recentBlock = params.recentTurns
       .map((turn) => `${turn.role.toUpperCase()}: ${turn.text}`)
       .join("\n");
 
-    const toolBlock = dedupeTools(params.toolResults)
+    const effectiveToolBlock = dedupeTools(params.toolResults)
       .map((result) => {
         const savings =
           typeof result.savedTokens === "number" && result.savedTokens > 0
@@ -71,14 +75,14 @@ export class PromptBuilder {
         priority: 88,
         targetRatio: 0.2,
         minTokens: 64,
-        content: memoryBlock || "No relevant long-term memory retrieved.",
+        content: effectiveMemoryBlock || "No relevant long-term memory retrieved.",
       },
       {
         name: "COMPRESSED TOOL OUTPUT",
         priority: 78,
         targetRatio: 0.12,
         minTokens: 48,
-        content: toolBlock || "No tool output required for this turn.",
+        content: effectiveToolBlock || "No tool output required for this turn.",
       },
       {
         name: "OLDER HISTORY SUMMARY",
@@ -129,6 +133,49 @@ function dedupeMemories(memories: MemoryRecord[]): MemoryRecord[] {
     seen.add(key);
     return true;
   });
+}
+
+function sortMemoriesForPrompt(memories: MemoryRecord[], userMessage: string): MemoryRecord[] {
+  const recallIntent = /记得|remember|偏好|preference|项目|project|重点|focus/i.test(userMessage);
+  return dedupeMemories(memories).sort((left, right) => promptPriority(right, recallIntent) - promptPriority(left, recallIntent));
+}
+
+function promptPriority(memory: MemoryRecord, recallIntent: boolean): number {
+  const base = memory.score ?? memory.scoreBreakdown?.finalScore ?? memory.importance ?? memory.salience;
+  const typeBias =
+    memory.kind === "preference" ? 3 : memory.kind === "semantic" ? 2 : memory.kind === "session_state" ? 1 : 0;
+  const recallBias =
+    recallIntent && memory.kind === "preference"
+      ? 4
+      : recallIntent && memory.kind === "semantic"
+        ? 3
+        : recallIntent && memory.kind === "session_state"
+          ? 1
+          : 0;
+  return base + typeBias + recallBias;
+}
+
+function buildMemoryDigest(memories: MemoryRecord[], userMessage: string): string {
+  const sorted = sortMemoriesForPrompt(memories, userMessage);
+  if (sorted.length === 0) {
+    return "";
+  }
+  const stablePreferences = sorted
+    .filter((memory) => memory.kind === "preference")
+    .map((memory) => memory.summary)
+    .slice(0, 2);
+  const currentProject = sorted
+    .filter((memory) => memory.kind === "semantic" || memory.kind === "session_state")
+    .map((memory) => memory.summary)
+    .slice(0, 2);
+  const lines: string[] = [];
+  if (stablePreferences.length > 0) {
+    lines.push(`Use these stable user preferences first: ${stablePreferences.join(" | ")}`);
+  }
+  if (currentProject.length > 0) {
+    lines.push(`Use this current project/task context if relevant: ${currentProject.join(" | ")}`);
+  }
+  return lines.join("\n");
 }
 
 function dedupeTools(toolResults: CompactedToolResult[]): CompactedToolResult[] {

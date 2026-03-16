@@ -396,6 +396,26 @@ function extractSemanticCandidates(text: string): CandidateSeed[] {
       summary: (match) => `User is working on ${sentenceFromText(match[1])}.`,
       group: "semantic:project",
     },
+    {
+      regex: /项目上下文[:：]?\s*(.+)/,
+      summary: (match) => `Project context: ${sentenceFromText(match[1])}.`,
+      group: "semantic:project",
+    },
+    {
+      regex: /(?:当前项目|项目重点|主要聚焦|当前重点)[:：]?\s*(.+)/,
+      summary: (match) => `Project focus: ${sentenceFromText(match[1])}.`,
+      group: "semantic:project",
+    },
+    {
+      regex: /(.+?)主要聚焦(.+)/,
+      summary: (match) => `Project focus: ${sentenceFromText(`${match[1]} focuses on ${match[2]}`)}.`,
+      group: "semantic:project",
+    },
+    {
+      regex: /focus(?:es)? on (.+)/i,
+      summary: (match) => `Project focus: ${sentenceFromText(match[1])}.`,
+      group: "semantic:project",
+    },
   ];
 
   return patterns.flatMap((pattern) => {

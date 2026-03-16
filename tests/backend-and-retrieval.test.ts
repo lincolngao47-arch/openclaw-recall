@@ -426,3 +426,58 @@ test("stale semantic facts remain inspectable but stop polluting retrieval", asy
     await cleanupTempDir(tempDir);
   }
 });
+
+test("recall-style queries prioritize stable preferences and current project context", async () => {
+  const tempDir = await createTempDir("openclaw-recall-recall-priority-");
+  try {
+    const config = buildConfig({
+      storageDir: tempDir,
+      databasePath: path.join(tempDir, "memory.sqlite"),
+      retrieval: {
+        mode: "hybrid",
+        fallbackToKeyword: true,
+      },
+    });
+    const store = new MemoryStore(
+      new PluginDatabase(config.databasePath),
+      createEmbeddingProvider(config),
+      0.92,
+      config,
+    );
+    await store.upsertMany([
+      buildMemory("User prefers Chinese responses and concise execution-oriented updates.", {
+        kind: "preference",
+        scope: "private",
+        scopeKey: "user:default",
+        importance: 9.5,
+        salience: 9,
+      }),
+      buildMemory("Project focus is backend, scope, and import quality for Recall v1.1.", {
+        kind: "semantic",
+        memoryGroup: "semantic:project",
+        scope: "workspace",
+        scopeKey: "workspace:default",
+        importance: 9,
+        salience: 8.5,
+      }),
+      buildMemory("Session wrapper metadata for remote run.", {
+        kind: "session_state",
+        scope: "session",
+        scopeKey: "session:s1",
+        importance: 5,
+        salience: 4,
+      }),
+    ]);
+
+    const retriever = new MemoryRetriever(store, new MemoryRanker(), createEmbeddingProvider(config), 4, config);
+    const result = await retriever.retrieveWithContext("你记得我的偏好和当前项目重点吗？", 3, {
+      sessionId: "s1",
+    });
+
+    assert.equal(result.memories.length, 3);
+    assert.match(result.memories[0].summary, /prefers Chinese|Chinese responses/i);
+    assert.match(result.memories[1].summary, /Project focus is backend, scope, and import quality/i);
+  } finally {
+    await cleanupTempDir(tempDir);
+  }
+});

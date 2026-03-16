@@ -3,6 +3,7 @@ import { sanitizeAssistantOutput } from "../shared/safety.js";
 
 type OpenAIResponsesParams = {
   input?: unknown[];
+  instructions?: string;
 };
 
 type OpenAIResponseStreamEvent =
@@ -45,6 +46,9 @@ function extractInputTexts(input: unknown[]): string {
       }
       const record = item as Record<string, unknown>;
       const content = record.content;
+      if (typeof content === "string") {
+        return [content];
+      }
       if (!Array.isArray(content)) {
         return [];
       }
@@ -127,6 +131,65 @@ function extractPreferenceHints(text: string): string[] {
   ).slice(0, 3);
 }
 
+function extractMemoryBullets(text: string): string[] {
+  return Array.from(
+    new Set(
+      text
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .filter((line) => /^[-•]/.test(line) || /(Use these stable user preferences first|Use this current project\/task context if relevant):/i.test(line))
+        .flatMap((line) => {
+          const cleaned = line
+            .replace(/^[-•]\s*/, "")
+            .replace(/\[(?:preference|semantic|session_state|episodic)\]\s*/gi, "")
+            .replace(/\s*\((?:score|importance|why)[^)]*\)/gi, "")
+            .trim();
+          if (/(Use these stable user preferences first|Use this current project\/task context if relevant):/i.test(cleaned)) {
+            return cleaned
+              .replace(/^[^:]+:\s*/i, "")
+              .split(/\s+\|\s+/)
+              .map((entry) => entry.trim())
+              .filter(Boolean);
+          }
+          return [cleaned];
+        })
+        .map((line) => line.replace(/^Current task:\s*/i, "").trim())
+        .filter(Boolean),
+    ),
+  ).slice(0, 6);
+}
+
+function extractEngramMemoryHints(text: string): string[] {
+  const match = /## Memory Context \(Engram\)([\s\S]*?)(?:\n## |\n# Project Context|\n## Workspace|\n## Runtime|$)/i.exec(text);
+  if (!match?.[1]) {
+    return [];
+  }
+  return Array.from(
+    new Set(
+      match[1]
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .filter((line) => !/^\[\d+\]\s/.test(line))
+        .filter((line) => !/^## /.test(line))
+        .filter((line) => !/Use this context naturally/i.test(line))
+        .map((line) => line.replace(/\s+\(score:[^)]+\)\s*/i, "").trim()),
+    ),
+  ).slice(0, 4);
+}
+
+function chooseRecallLines(memoryLines: string[], taskLine: string): string[] {
+  const preference = memoryLines.filter((line) => /prefers|喜欢|偏|中文|简洁|详细|直接|结构化|执行导向/i.test(line));
+  const project = memoryLines.filter((line) => /project|项目|focus|重点|backend|scope|import|task|当前/i.test(line));
+  const ordered = Array.from(new Set([...preference, ...project, ...memoryLines]));
+  const selected = ordered.slice(0, 3);
+  if (taskLine && !selected.some((line) => line === taskLine || line.includes(taskLine))) {
+    selected.push(taskLine);
+  }
+  return selected.slice(0, 3);
+}
+
 function buildSseResponse(events: unknown[]): Response {
   const sse = `${events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("")}data: [DONE]\n\n`;
   const encoder = new TextEncoder();
@@ -176,7 +239,11 @@ function buildTextSse(text: string): Response {
 
 async function buildResponse(params: OpenAIResponsesParams): Promise<Response> {
   const input = Array.isArray(params.input) ? params.input : [];
-  const combinedText = extractInputTexts(input);
+  const instructionText = typeof params.instructions === "string" ? params.instructions : "";
+  if (process.env.OPENCLAW_RECALL_MOCK_DEBUG === "1") {
+    process.stderr.write(`[openclaw-recall-mock] ${JSON.stringify(params, null, 2)}\n`);
+  }
+  const combinedText = [instructionText, extractInputTexts(input)].filter(Boolean).join("\n\n");
   const userText = extractLastUserText(input);
   const toolOutput = extractToolOutput(input);
   const memorySection = extractSection(combinedText, "RELEVANT MEMORY");
@@ -224,25 +291,27 @@ async function buildResponse(params: OpenAIResponsesParams): Promise<Response> {
   }
 
   if (/记得|remember/i.test(userText)) {
-    const memoryLine = memorySection
-      .split(/\r?\n/)
-      .find((line) => line.trim() && !/No relevant/i.test(line))
-      ?.replace(/^\d+\.\s*/, "")
-      ?.replace(/•\s*/g, "")
-      ?.replace(/\[(?:preference|semantic|session_state|episodic)\]\s*/gi, "")
-      ?.replace(/\s*\((?:score|importance|why)[^)]*\)/gi, "")
-      ?.trim();
+    const memoryLines = extractMemoryBullets(memorySection);
+    const engramLines = extractEngramMemoryHints(combinedText);
     const fallbackMemoryLine = extractPreferenceHints(combinedText)[0] ?? "";
     const taskLine = taskSection
       .split(/\r?\n/)
       .find((line) => line.trim() && !/No active task/i.test(line))
       ?.trim();
+    const selected = chooseRecallLines([...memoryLines, ...engramLines], taskLine ?? "");
+    const recallSummary =
+      selected.length > 1
+        ? `我记得这些稳定信息：${selected.join("；")}`
+        : selected[0]
+          ? `我记得：${selected[0]}`
+          : fallbackMemoryLine
+            ? `我记得：${fallbackMemoryLine}`
+            : "我暂时没有检索到稳定记忆。";
 
     return buildTextSse(
       sanitizeAssistantOutput(
       [
-        memoryLine || fallbackMemoryLine ? `我记得：${memoryLine || fallbackMemoryLine}` : "我暂时没有检索到稳定记忆。",
-        taskLine ? `当前任务状态：${taskLine}` : "",
+        recallSummary,
       ]
         .filter(Boolean)
         .join("\n"),

@@ -15,6 +15,7 @@ These paths are verified on `main`, but are not yet claimed as a tagged release 
 - export/import restore across two installs
 - scope metadata persistence across remote reconnect flows
 - `doctor` / `status` / `memory explain` on the restored install
+- restored natural-language recall after reconnect/import
 
 ## Verified versions
 
