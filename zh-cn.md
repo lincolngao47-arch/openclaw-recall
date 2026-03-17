@@ -1,5 +1,7 @@
 # 🦞 OpenClaw Recall🦞
-[English](https://github.com/Felix201209/openclaw-recall/blob/main/README.md)
+
+**Other Language: [English](https://github.com/Felix201209/openclaw-recall/blob/main/README.md)**
+
 **OpenClaw 的持久记忆、上下文压缩与运行状态可视化插件。🦞**
 
 <p align="center">
