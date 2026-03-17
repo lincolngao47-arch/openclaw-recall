@@ -10,7 +10,8 @@
     src="https://github.com/user-attachments/assets/deb61efe-93a8-47b3-9ae9-b5cc2c741625"
   />
 </p>
-[简体中文](https://github.com/Felix201209/openclaw-recall/blob/main/zh-cn.md)
+
+**Other Language: [简体中文](https://github.com/Felix201209/openclaw-recall/blob/main/zh-cn.md)** 
 
 Current stable release: **`1.3.0`** · npm: **`@felixypz/openclaw-recall`**
 
