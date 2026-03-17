@@ -1,6 +1,8 @@
 # OpenClaw Recall
 
 **Persistent memory, context compression, and profile visibility for OpenClaw.**
+<img width="744" height="193" alt="Screenshot 2026-03-17 at 07 27 30" src="https://github.com/user-attachments/assets/deb61efe-93a8-47b3-9ae9-b5cc2c741625" />
+
 
 Current stable release: **`1.3.0`** · npm: **`@felixypz/openclaw-recall`**
 
