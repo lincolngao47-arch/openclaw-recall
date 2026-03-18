@@ -277,6 +277,34 @@ test("reindex refreshes scope metadata and fingerprints without deleting good me
   }
 });
 
+test("updateMemory refreshes fingerprint when the summary changes", async () => {
+  const tempDir = await createTempDir("openclaw-memory-store-");
+  try {
+    const store = new MemoryStore(
+      new PluginDatabase(path.join(tempDir, "memory.sqlite")),
+      embeddingProvider,
+      0.92,
+    );
+
+    const original = memory({
+      kind: "preference",
+      summary: "User prefers concise updates.",
+      memoryGroup: "preference:style",
+    });
+    await store.upsertMany([original]);
+
+    const updated = await store.updateMemory(original.id, {
+      summary: "User prefers concise structured updates.",
+      content: "User prefers concise structured updates.",
+    });
+
+    assert(updated);
+    assert.notEqual(updated.fingerprint, original.fingerprint);
+  } finally {
+    await cleanupTempDir(tempDir);
+  }
+});
+
 test("compact preserves superseded memory rows while shrinking stale content", async () => {
   const tempDir = await createTempDir("openclaw-memory-store-");
   try {

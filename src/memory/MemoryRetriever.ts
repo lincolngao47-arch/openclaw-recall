@@ -18,7 +18,11 @@ export class MemoryRetriever {
     private readonly config: ResolvedPluginConfig,
   ) {}
 
-  async retrieve(query: string, limit: number, options: { sessionId?: string } = {}): Promise<MemoryRecord[]> {
+  async retrieve(
+    query: string,
+    limit: number,
+    options: { sessionId?: string; touch?: boolean } = {},
+  ): Promise<MemoryRecord[]> {
     const result = await this.retrieveWithContext(query, limit, options);
     return result.memories;
   }
@@ -26,7 +30,7 @@ export class MemoryRetriever {
   async retrieveWithContext(
     query: string,
     limit: number,
-    options: { sessionId?: string } = {},
+    options: { sessionId?: string; touch?: boolean } = {},
   ): Promise<{
     memories: MemoryRecord[];
     mode: RetrievalMode;
@@ -34,11 +38,24 @@ export class MemoryRetriever {
     semanticContribution: number;
   }> {
     const cleanQuery = sanitizeIncomingUserText(query);
-    const usedMode = this.resolveRetrievalMode();
-    const memories = (await this.store.search(cleanQuery)).filter((memory) =>
+    let usedMode = this.resolveRetrievalMode();
+    let memories = (await this.selectCandidates(cleanQuery, usedMode)).filter((memory) =>
       isMemoryVisible(memory, this.config, options.sessionId),
     );
-    const queryEmbedding = usedMode === "keyword" ? [] : await this.embeddings.embed(cleanQuery);
+    let queryEmbedding: number[] = [];
+    if (usedMode !== "keyword") {
+      try {
+        queryEmbedding = await this.embeddings.embed(cleanQuery);
+      } catch {
+        if (!this.config.retrieval.fallbackToKeyword) {
+          throw new Error("Embedding retrieval failed and keyword fallback is disabled.");
+        }
+        usedMode = "keyword";
+        memories = (await this.store.search(cleanQuery)).filter((memory) =>
+          isMemoryVisible(memory, this.config, options.sessionId),
+        );
+      }
+    }
     const candidatePoolSize = Math.max(limit * 4, this.bootTopK * 2, 8);
     const ranked = this.rankCandidates(cleanQuery, memories, queryEmbedding, usedMode, candidatePoolSize);
     const boot = options.sessionId
@@ -51,7 +68,9 @@ export class MemoryRetriever {
     const merged = this.mergeCandidates(cleanQuery, ranked, visibleBoot);
     const diversified = this.diversifyCandidates(cleanQuery, merged, limit);
     const selected = this.rebalanceForQueryFacets(cleanQuery, merged, diversified, limit);
-    await this.store.touch(selected);
+    if (options.touch !== false) {
+      await this.store.touch(selected);
+    }
     return {
       memories: selected,
       mode: usedMode,
@@ -66,14 +85,18 @@ export class MemoryRetriever {
     };
   }
 
-  async explain(query: string, limit: number, options: { sessionId?: string } = {}): Promise<MemoryRecord[]> {
-    return (await this.retrieveWithContext(query, limit, options)).memories;
+  async explain(
+    query: string,
+    limit: number,
+    options: { sessionId?: string; touch?: boolean } = {},
+  ): Promise<MemoryRecord[]> {
+    return (await this.retrieveWithContext(query, limit, { ...options, touch: false })).memories;
   }
 
   async explainDetailed(
     query: string,
     limit: number,
-    options: { sessionId?: string } = {},
+    options: { sessionId?: string; touch?: boolean } = {},
   ): Promise<{
     query: string;
     retrievalMode: RetrievalMode;
@@ -106,7 +129,7 @@ export class MemoryRetriever {
         effectiveImportance: effectiveImportance(entry.memory),
         reasons: entry.reasons,
       }));
-    const selected = (await this.retrieveWithContext(cleanQuery, limit, options));
+    const selected = (await this.retrieveWithContext(cleanQuery, limit, { ...options, touch: false }));
     const selectedWithBreakdown = selected.memories.map((memory) =>
       memory.scoreBreakdown
         ? memory
@@ -159,6 +182,13 @@ export class MemoryRetriever {
       return "hybrid";
     }
     return this.config.retrieval.fallbackToKeyword ? "keyword" : "embedding";
+  }
+
+  private async selectCandidates(query: string, mode: RetrievalMode): Promise<MemoryRecord[]> {
+    if (mode === "keyword") {
+      return await this.store.search(query);
+    }
+    return await this.store.listRetrievable();
   }
 
   private mergeCandidates(query: string, ranked: MemoryRecord[], boot: MemoryRecord[]): MemoryRecord[] {

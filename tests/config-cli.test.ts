@@ -5,9 +5,10 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createTempDir, cleanupTempDir } from "./helpers/temp-db.js";
+import { resolveTsxCommand } from "./helpers/tsx-path.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const tsxBin = path.join(repoRoot, "node_modules", ".bin", "tsx");
+const tsx = resolveTsxCommand(repoRoot);
 
 test("config init local prints a usable starter entry", async () => {
   const tempDir = await createTempDir("openclaw-recall-config-");
@@ -96,7 +97,7 @@ test("config show includes resolved identity mode", async () => {
 
 function runCli(args: string[], openclawRoot: string): any {
   return JSON.parse(
-    execFileSync(tsxBin, ["src/cli/index.ts", ...args], {
+    execFileSync(tsx.command, [...tsx.argsPrefix, "src/cli/index.ts", ...args], {
       cwd: repoRoot,
       encoding: "utf8",
       env: {

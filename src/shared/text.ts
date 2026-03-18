@@ -5,16 +5,25 @@ export function estimateTokens(text: string): number {
 }
 
 export function tokenize(text: string): string[] {
-  return Array.from(
-    new Set(
-      text
-        .toLowerCase()
-        .replace(/[^\p{L}\p{N}\s]/gu, " ")
-        .split(/\s+/)
-        .map((token) => token.trim())
-        .filter((token) => token.length >= 2),
-    ),
-  );
+  const tokens = new Set<string>();
+  const parts = text
+    .toLowerCase()
+    .replace(/[_/\\-]+/g, " ")
+    .match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+|[\p{L}\p{N}]+/gu) ?? [];
+
+  for (const part of parts) {
+    if (isCjkSequence(part)) {
+      for (const token of cjkNgrams(part)) {
+        tokens.add(token);
+      }
+      continue;
+    }
+    if (part.length >= 2) {
+      tokens.add(part);
+    }
+  }
+
+  return Array.from(tokens);
 }
 
 export function fingerprint(value: string): string {
@@ -50,4 +59,23 @@ export function chunkArray<T>(items: T[], chunkSize: number): T[][] {
     chunks.push(items.slice(index, index + chunkSize));
   }
   return chunks;
+}
+
+function isCjkSequence(value: string): boolean {
+  return /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+$/u.test(value);
+}
+
+function cjkNgrams(value: string): string[] {
+  const chars = Array.from(value);
+  if (chars.length <= 2) {
+    return [value];
+  }
+  const grams: string[] = [];
+  for (let index = 0; index < chars.length - 1; index += 1) {
+    grams.push(chars.slice(index, index + 2).join(""));
+  }
+  if (chars.length <= 4) {
+    grams.push(value);
+  }
+  return grams;
 }

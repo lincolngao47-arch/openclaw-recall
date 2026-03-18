@@ -16,9 +16,9 @@ export function createInspectHttpHandler(params: {
       return false;
     }
 
-    if (pathname === basePath || pathname === `${basePath}/dashboard`) {
+    if (pathname === basePath || pathname === `${basePath}/dashboard` || pathname === `${basePath}/notes`) {
       const sessions = await params.container.eventStore.listSessions(20);
-      const memories = await params.container.memoryStore.listActive();
+      const memories = await params.container.memoryStore.listAll();
       const profiles = await params.container.profileStore.list(20);
       sendHtml(
         res,
@@ -45,10 +45,17 @@ export function createInspectHttpHandler(params: {
     if (pathname === `${basePath}/memories`) {
       const query = url.searchParams.get("q")?.trim();
       const sessionId = url.searchParams.get("sessionId")?.trim() || undefined;
+      const includeInactive = url.searchParams.get("includeInactive") === "1";
       if (query) {
         sendJson(res, 200, await params.container.memoryRetriever.explain(query, 10, { sessionId }));
       } else {
-        sendJson(res, 200, await params.container.memoryStore.listActive());
+        sendJson(
+          res,
+          200,
+          includeInactive
+            ? await params.container.memoryStore.listAll()
+            : await params.container.memoryStore.listActive(),
+        );
       }
       return true;
     }

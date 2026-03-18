@@ -50,6 +50,12 @@ export class MemoryStore {
       .filter((memory) => !shouldSuppressMemory(memory));
   }
 
+  async listRetrievable(): Promise<MemoryRecord[]> {
+    return (await this.listActive())
+      .filter((memory) => isRetrievalEligible(memory))
+      .filter((memory) => !shouldSuppressMemory(memory));
+  }
+
   async getById(id: string): Promise<MemoryRecord | null> {
     return await this.backend.getMemory(id);
   }

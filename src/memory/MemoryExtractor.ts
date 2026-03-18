@@ -8,6 +8,7 @@ import {
   shouldRejectMemoryCandidate,
 } from "../shared/safety.js";
 import { ChatTurn, MemoryKind, MemoryRecord, SessionState } from "../types/domain.js";
+import { buildMemoryFingerprint } from "./identity.js";
 
 export interface ExtractionResult {
   memories: MemoryRecord[];
@@ -55,6 +56,7 @@ export class MemoryExtractor {
     const now = new Date().toISOString();
     const isQuestion = /[?？]/.test(text);
     const isRecallQuery = /记得|remember|memory|回忆|还记得/i.test(text);
+    const preferenceRequest = hasPreferenceRequestSignal(text);
     const assistantPreferenceSummary = turn.role === "assistant" && hasStablePreferenceSignal(text);
     const candidates: CandidateSeed[] = [];
     const statePatch: ExtractionResult["statePatch"] = {
@@ -63,8 +65,10 @@ export class MemoryExtractor {
       openQuestions: [],
     };
 
-    if (!isQuestion && !isRecallQuery) {
+    if (!isRecallQuery && (!isQuestion || preferenceRequest)) {
       candidates.push(...extractPreferenceCandidates(text));
+    }
+    if (!isQuestion && !isRecallQuery) {
       if (turn.role !== "assistant") {
         candidates.push(...extractSemanticCandidates(text));
         candidates.push(...extractEpisodicCandidates(text));
@@ -194,7 +198,11 @@ export class MemoryExtractor {
       topics,
       entityKeys,
       salience: Math.min(10, 4 + importance),
-      fingerprint: fingerprint(`${candidate.kind}:${normalizedSummary}`),
+      fingerprint: buildMemoryFingerprint({
+        kind: candidate.kind,
+        summary: normalizedSummary,
+        memoryGroup: candidate.memoryGroup,
+      }),
       createdAt: now,
       lastSeenAt: now,
       ttlDays: candidate.ttlDays ?? this.defaultTtlFor(candidate.kind),
@@ -254,6 +262,11 @@ function extractPreferenceCandidates(text: string): CandidateSeed[] {
       group: "preference:name",
     },
     {
+      regex: /call me (.+)/i,
+      summary: (match) => `User prefers to be addressed as ${sentenceFromText(match[1], 40)}.`,
+      group: "preference:name",
+    },
+    {
       regex: /i prefer (.+)/i,
       summary: (match) => `User prefers ${sentenceFromText(match[1])}.`,
       group: "preference:style",
@@ -269,7 +282,7 @@ function extractPreferenceCandidates(text: string): CandidateSeed[] {
       group: "preference:style",
     },
     {
-      regex: /prefer chinese|use chinese|中文回答|用中文/i,
+      regex: /prefer chinese|use chinese|answer in chinese|reply in chinese|respond in chinese|中文回答|用中文/i,
       summary: () => "User prefers Chinese responses.",
       group: "preference:language",
       futureUtility: 3.8,
@@ -328,7 +341,7 @@ function extractPreferenceCandidates(text: string): CandidateSeed[] {
       confidence: 0.92,
     },
     {
-      regex: /以后.*用英文|英文回答|prefer english|use english/i,
+      regex: /以后.*用英文|英文回答|prefer english|use english|answer in english|reply in english|respond in english/i,
       summary: () => "User prefers English responses.",
       group: "preference:language",
       futureUtility: 3.7,
@@ -438,8 +451,12 @@ function extractSemanticCandidates(text: string): CandidateSeed[] {
         confidence: 0.86,
         memoryGroup: pattern.group,
       },
-    ];
-  });
+      ];
+    });
+}
+
+function hasPreferenceRequestSignal(text: string): boolean {
+  return /以后|从现在开始|默认|请用|用中文|用英文|answer in (?:chinese|english)|reply in (?:chinese|english)|respond in (?:chinese|english)|call me|叫我|prefer|喜欢|不喜欢|希望|简洁|详细|结构化|结论|下一步/i.test(text);
 }
 
 function extractEpisodicCandidates(text: string): CandidateSeed[] {

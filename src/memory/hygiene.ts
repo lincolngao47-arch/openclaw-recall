@@ -1,8 +1,9 @@
 import type { MemoryRecord } from "../types/domain.js";
 import { explainSuppressedMemory } from "../shared/safety.js";
-import { fingerprint, tokenize } from "../shared/text.js";
+import { tokenize } from "../shared/text.js";
 import type { ResolvedPluginConfig } from "../config/schema.js";
 import { defaultScopeFor, defaultScopeKey } from "./scopes.js";
+import { buildMemoryFingerprint } from "./identity.js";
 
 export type HygieneSummary = {
   score: number;
@@ -47,12 +48,7 @@ export function buildReindexedMemory(memory: MemoryRecord, config: ResolvedPlugi
     scope,
     scopeKey,
   };
-  const nextFingerprint = fingerprint([
-    scoped.kind,
-    scoped.memoryGroup ?? "",
-    scoped.summary.toLowerCase(),
-    scoped.content.toLowerCase(),
-  ].join("|"));
+  const nextFingerprint = buildMemoryFingerprint(scoped);
   return {
     ...scoped,
     fingerprint: nextFingerprint,

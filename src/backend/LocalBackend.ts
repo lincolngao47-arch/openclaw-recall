@@ -1,4 +1,5 @@
 import { cosineSimilarity, EmbeddingProvider } from "../memory/EmbeddingProvider.js";
+import { buildMemoryEmbeddingText, buildMemoryFingerprint } from "../memory/identity.js";
 import { shouldSuppressMemory } from "../shared/safety.js";
 import { tokenize } from "../shared/text.js";
 import type { MemoryRecord } from "../types/domain.js";
@@ -92,66 +93,81 @@ export class LocalBackend implements MemoryBackend {
     if (candidates.length === 0) {
       return { candidateCount: 0, written, updated, superseded };
     }
+    const activePool = await this.listActive();
 
     for (const candidate of candidates) {
+      const normalizedCandidate: MemoryRecord = {
+        ...candidate,
+        fingerprint: buildMemoryFingerprint(candidate),
+      };
       const existing = this.database.connection
         .prepare(`SELECT * FROM memories WHERE fingerprint = ?`)
-        .get(candidate.fingerprint) as MemoryRow | undefined;
+        .get(normalizedCandidate.fingerprint) as MemoryRow | undefined;
 
       if (existing) {
         const previous = this.fromRow(existing);
-        const merged = await this.mergeMemory(previous, candidate);
-        this.updateByFingerprint(merged);
+        const merged = await this.mergeMemory(previous, normalizedCandidate);
+        this.updateById(merged);
+        syncActivePool(activePool, previous.id, merged);
         updated += 1;
         continue;
       }
 
       const groupRow =
-        candidate.memoryGroup
+        normalizedCandidate.memoryGroup
           ? (this.database.connection
               .prepare(`SELECT * FROM memories WHERE json_extract(meta_json, '$.memoryGroup') = ? ORDER BY created_at DESC LIMIT 1`)
-              .get(candidate.memoryGroup) as MemoryRow | undefined)
+              .get(normalizedCandidate.memoryGroup) as MemoryRow | undefined)
           : undefined;
 
       if (groupRow) {
         const previous = this.fromRow(groupRow);
-        if (shouldSupersede(previous, candidate)) {
+        if (shouldSupersede(previous, normalizedCandidate)) {
           const embedding =
-            candidate.embedding ??
-            (await this.embeddings.embed([candidate.summary, candidate.content].join("\n")));
+            normalizedCandidate.embedding ??
+            (await this.embeddings.embed(buildMemoryEmbeddingText(normalizedCandidate)));
           const next = {
-            ...candidate,
+            ...normalizedCandidate,
             embedding,
             version: (previous.version ?? 1) + 1,
-            memoryGroup: candidate.memoryGroup ?? previous.memoryGroup,
+            memoryGroup: normalizedCandidate.memoryGroup ?? previous.memoryGroup,
             active: true,
           };
           this.insert(next);
           this.markSuperseded(previous.id, next.id);
+          syncActivePool(activePool, previous.id, null);
+          syncActivePool(activePool, next.id, next);
           written += 1;
           superseded += 1;
           continue;
         }
 
-        const merged = await this.mergeMemory(previous, candidate);
-        this.updateByFingerprint(merged);
+        const merged = await this.mergeMemory(previous, normalizedCandidate);
+        this.updateById(merged);
+        syncActivePool(activePool, previous.id, merged);
         updated += 1;
         continue;
       }
 
       const embedding =
-        candidate.embedding ??
-        (await this.embeddings.embed([candidate.summary, candidate.content].join("\n")));
+        normalizedCandidate.embedding ??
+        (await this.embeddings.embed(buildMemoryEmbeddingText(normalizedCandidate)));
 
-      const similar = await this.findSimilarActive(candidate, embedding);
+      const similar = this.findSimilarActive(normalizedCandidate, embedding, activePool);
       if (similar) {
-        const merged = await this.mergeMemory(similar, { ...candidate, embedding });
-        this.updateByFingerprint(merged);
+        const merged = await this.mergeMemory(similar, { ...normalizedCandidate, embedding });
+        this.updateById(merged);
+        syncActivePool(activePool, similar.id, merged);
         updated += 1;
         continue;
       }
 
-      this.insert({ ...candidate, embedding });
+      const inserted = {
+        ...normalizedCandidate,
+        embedding,
+      };
+      this.insert(inserted);
+      syncActivePool(activePool, inserted.id, inserted);
       written += 1;
     }
 
@@ -172,8 +188,15 @@ export class LocalBackend implements MemoryBackend {
       ...current,
       ...patch,
       id: current.id,
-      fingerprint: patch.fingerprint ?? current.fingerprint,
     };
+    const textChanged =
+      next.summary !== current.summary ||
+      next.content !== current.content ||
+      next.memoryGroup !== current.memoryGroup;
+    next.fingerprint = patch.fingerprint ?? buildMemoryFingerprint(next);
+    if (textChanged && !patch.embedding?.length) {
+      next.embedding = await this.embeddings.embed(buildMemoryEmbeddingText(next));
+    }
     this.updateById(next);
     return await this.getMemory(id);
   }
@@ -230,11 +253,11 @@ export class LocalBackend implements MemoryBackend {
     return { ok: true, detail: "local sqlite backend", mode: "local", backendType: this.backendType };
   }
 
-  private async findSimilarActive(
+  private findSimilarActive(
     candidate: MemoryRecord,
     embedding: number[],
-  ): Promise<MemoryRecord | null> {
-    const active = await this.listActive();
+    active: MemoryRecord[],
+  ): MemoryRecord | null {
     let best: { memory: MemoryRecord; similarity: number } | null = null;
     for (const memory of active) {
       if (memory.kind !== candidate.kind) {
@@ -269,13 +292,21 @@ export class LocalBackend implements MemoryBackend {
       sourceSessionId: candidate.sourceSessionId,
       sourceTurnIds: Array.from(new Set([...previous.sourceTurnIds, ...candidate.sourceTurnIds])),
       embedding: previous.embedding?.length ? previous.embedding : candidate.embedding,
+      fingerprint: buildMemoryFingerprint({
+        kind: previous.kind,
+        summary: preferSummary(previous.summary, candidate.summary),
+        memoryGroup: candidate.memoryGroup ?? previous.memoryGroup,
+      }),
       version: Math.max(previous.version ?? 1, candidate.version ?? 1),
       supersededAt: undefined,
       supersededBy: undefined,
     };
 
-    if (!merged.embedding?.length) {
-      merged.embedding = await this.embeddings.embed([merged.summary, merged.content].join("\n"));
+    const textChanged = merged.summary !== previous.summary || merged.content !== previous.content;
+    if (textChanged && candidate.embedding?.length && merged.summary === candidate.summary && merged.content === candidate.content) {
+      merged.embedding = candidate.embedding;
+    } else if (textChanged || !merged.embedding?.length) {
+      merged.embedding = await this.embeddings.embed(buildMemoryEmbeddingText(merged));
     }
 
     return merged;
@@ -322,44 +353,6 @@ export class LocalBackend implements MemoryBackend {
         memory.sourceSessionId,
         JSON.stringify(memory.sourceTurnIds),
         JSON.stringify(memory.embedding ?? []),
-      );
-  }
-
-  private updateByFingerprint(memory: MemoryRecord): void {
-    this.database.connection
-      .prepare(`
-        UPDATE memories
-        SET
-          summary = ?,
-          content = ?,
-          topics_json = ?,
-          entity_keys_json = ?,
-          salience = ?,
-          last_seen_at = ?,
-          last_accessed_at = ?,
-          ttl_days = ?,
-          decay_rate = ?,
-          meta_json = ?,
-          source_session_id = ?,
-          source_turn_ids_json = ?,
-          embedding_json = ?
-        WHERE fingerprint = ?
-      `)
-      .run(
-        memory.summary,
-        memory.content,
-        JSON.stringify(memory.topics),
-        JSON.stringify(memory.entityKeys),
-        memory.salience,
-        new Date(memory.lastSeenAt).getTime(),
-        memory.lastAccessedAt ? new Date(memory.lastAccessedAt).getTime() : null,
-        memory.ttlDays ?? null,
-        memory.decayRate,
-        JSON.stringify(toMeta(memory)),
-        memory.sourceSessionId,
-        JSON.stringify(memory.sourceTurnIds),
-        JSON.stringify(memory.embedding ?? []),
-        memory.fingerprint,
       );
   }
 
@@ -564,4 +557,19 @@ function shouldSupersede(previous: MemoryRecord, candidate: MemoryRecord): boole
     ((/chinese|中文/.test(previousText)) && (/english|英文/.test(nextText))) ||
     (previous.memoryGroup === "semantic:project" && previous.summary !== candidate.summary)
   );
+}
+
+function syncActivePool(pool: MemoryRecord[], id: string, next: MemoryRecord | null): void {
+  const index = pool.findIndex((memory) => memory.id === id);
+  if (!next) {
+    if (index >= 0) {
+      pool.splice(index, 1);
+    }
+    return;
+  }
+  if (index >= 0) {
+    pool.splice(index, 1, next);
+    return;
+  }
+  pool.push(next);
 }

@@ -5,12 +5,14 @@ import path from "node:path";
 import { startRecallHttpBackendServer } from "../src/backend/RecallHttpBackend.js";
 import { defaultPluginConfig } from "../src/config/defaults.js";
 import { createEmbeddingProvider } from "../src/memory/EmbeddingProvider.js";
+import { MemoryExtractor } from "../src/memory/MemoryExtractor.js";
 import { MemoryRanker } from "../src/memory/MemoryRanker.js";
 import { MemoryRetriever } from "../src/memory/MemoryRetriever.js";
 import { MemoryStore } from "../src/memory/MemoryStore.js";
 import { PluginDatabase } from "../src/storage/PluginDatabase.js";
 import type { ResolvedPluginConfig } from "../src/config/schema.js";
 import type { MemoryRecord } from "../src/types/domain.js";
+import type { EmbeddingProvider } from "../src/memory/EmbeddingProvider.js";
 import { cleanupTempDir, createTempDir } from "./helpers/temp-db.js";
 
 function buildConfig(overrides: Partial<ResolvedPluginConfig>): ResolvedPluginConfig {
@@ -86,6 +88,30 @@ function buildMemory(summary: string, extras: Partial<MemoryRecord> = {}): Memor
     sourceSessionId: extras.sourceSessionId ?? "s1",
     sourceTurnIds: extras.sourceTurnIds ?? ["t1"],
     embedding: extras.embedding ?? [],
+  };
+}
+
+function fixedEmbeddingProvider(vectors: Record<string, number[]>): EmbeddingProvider {
+  return {
+    providerId: "openai",
+    dimensions: 3,
+    available: true,
+    availability: "exact",
+    async embed(text: string): Promise<number[]> {
+      return vectors[text] ?? [0, 0, 1];
+    },
+  };
+}
+
+function throwingEmbeddingProvider(): EmbeddingProvider {
+  return {
+    providerId: "openai",
+    dimensions: 3,
+    available: true,
+    availability: "exact",
+    async embed(): Promise<number[]> {
+      throw new Error("embedding network failed");
+    },
   };
 }
 
@@ -243,6 +269,69 @@ test("recall-http backend reports auth failure and unreachable status", async ()
   }
 });
 
+test("embedding retrieval can surface semantic matches without lexical overlap", async () => {
+  const tempDir = await createTempDir("openclaw-recall-semantic-candidates-");
+  try {
+    const config = buildConfig({
+      storageDir: tempDir,
+      databasePath: path.join(tempDir, "memory.sqlite"),
+      retrieval: {
+        mode: "embedding",
+        fallbackToKeyword: false,
+      },
+    });
+    const store = new MemoryStore(new PluginDatabase(config.databasePath), createEmbeddingProvider(config), 0.92, config);
+    await store.upsertMany([
+      buildMemory("Release playbook for backend rollout.", {
+        kind: "semantic",
+        topics: ["release", "playbook", "backend", "rollout"],
+        embedding: [1, 0, 0],
+      }),
+    ]);
+    const retriever = new MemoryRetriever(store, new MemoryRanker(), fixedEmbeddingProvider({
+      "ship the launch": [1, 0, 0],
+    }), 4, config);
+    const result = await retriever.retrieveWithContext("ship the launch", 4, {
+      sessionId: "s1",
+      touch: false,
+    });
+    assert.equal(result.mode, "embedding");
+    assert.equal(result.memories.length, 1);
+    assert.match(result.memories[0].summary, /Release playbook/i);
+  } finally {
+    await cleanupTempDir(tempDir);
+  }
+});
+
+test("hybrid retrieval falls back to keyword when embedding requests fail at runtime", async () => {
+  const tempDir = await createTempDir("openclaw-recall-hybrid-runtime-fallback-");
+  try {
+    const config = buildConfig({
+      storageDir: tempDir,
+      databasePath: path.join(tempDir, "memory.sqlite"),
+      retrieval: {
+        mode: "hybrid",
+        fallbackToKeyword: true,
+      },
+    });
+    const store = new MemoryStore(new PluginDatabase(config.databasePath), createEmbeddingProvider(config), 0.92, config);
+    await store.upsertMany([
+      buildMemory("User prefers concise terminal-first answers.", {
+        topics: ["concise", "terminal", "answers"],
+      }),
+    ]);
+    const retriever = new MemoryRetriever(store, new MemoryRanker(), throwingEmbeddingProvider(), 4, config);
+    const result = await retriever.retrieveWithContext("concise terminal answers", 4, {
+      sessionId: "s1",
+      touch: false,
+    });
+    assert.equal(result.mode, "keyword");
+    assert.equal(result.memories.length, 1);
+  } finally {
+    await cleanupTempDir(tempDir);
+  }
+});
+
 test("hybrid retrieval falls back to keyword when embeddings are unavailable", async () => {
   const tempDir = await createTempDir("openclaw-recall-hybrid-");
   try {
@@ -269,6 +358,67 @@ test("hybrid retrieval falls back to keyword when embeddings are unavailable", a
     const result = await retriever.retrieveWithContext("concise terminal answers", 4, { sessionId: "s1" });
     assert.equal(result.mode, "keyword");
     assert.equal(result.memories.length, 1);
+  } finally {
+    await cleanupTempDir(tempDir);
+  }
+});
+
+test("memory explain does not mutate access metadata", async () => {
+  const tempDir = await createTempDir("openclaw-recall-explain-readonly-");
+  try {
+    const config = buildConfig({
+      storageDir: tempDir,
+      databasePath: path.join(tempDir, "memory.sqlite"),
+    });
+    const store = new MemoryStore(new PluginDatabase(config.databasePath), createEmbeddingProvider(config), 0.92, config);
+    const seeded = buildMemory("User prefers concise terminal-first answers.", {
+      topics: ["concise", "terminal", "answers"],
+    });
+    await store.upsertMany([seeded]);
+    const retriever = new MemoryRetriever(store, new MemoryRanker(), createEmbeddingProvider(config), 4, config);
+
+    await retriever.explain("concise terminal answers", 4, { sessionId: "s1" });
+    const memory = await store.getById(seeded.id);
+
+    assert.equal(memory?.lastAccessedAt, undefined);
+  } finally {
+    await cleanupTempDir(tempDir);
+  }
+});
+
+test("end-to-end chinese preference retrieval works without manual topic seeding", async () => {
+  const tempDir = await createTempDir("openclaw-recall-chinese-e2e-");
+  try {
+    const config = buildConfig({
+      storageDir: tempDir,
+      databasePath: path.join(tempDir, "memory.sqlite"),
+    });
+    const extractor = new MemoryExtractor({
+      writeThreshold: config.memory.writeThreshold,
+      preferenceTtlDays: config.memory.preferenceTtlDays,
+      semanticTtlDays: config.memory.semanticTtlDays,
+      episodicTtlDays: config.memory.episodicTtlDays,
+      sessionStateTtlDays: config.memory.sessionStateTtlDays,
+    });
+    const store = new MemoryStore(new PluginDatabase(config.databasePath), createEmbeddingProvider(config), 0.92, config);
+    const extracted = extractor.extract({
+      id: "turn-1",
+      sessionId: "s1",
+      role: "user",
+      text: "以后默认用中文回答，尽量简洁。",
+      createdAt: new Date().toISOString(),
+    });
+    await store.upsertMany(extracted.memories.map((memory) => ({
+      ...memory,
+      scope: "private",
+      scopeKey: "user:default",
+    })));
+    const retriever = new MemoryRetriever(store, new MemoryRanker(), createEmbeddingProvider(config), 4, config);
+    const result = await retriever.retrieveWithContext("之后继续用中文回答好吗", 4, {
+      sessionId: "s1",
+      touch: false,
+    });
+    assert.ok(result.memories.some((memory) => /Chinese responses/i.test(memory.summary)));
   } finally {
     await cleanupTempDir(tempDir);
   }

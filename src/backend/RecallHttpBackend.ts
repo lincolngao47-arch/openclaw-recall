@@ -3,8 +3,10 @@ import http from "node:http";
 import path from "node:path";
 import { URL } from "node:url";
 import type { ResolvedPluginConfig } from "../config/schema.js";
+import { buildMemoryFingerprint } from "../memory/identity.js";
 import type { MemoryRecord } from "../types/domain.js";
 import { shouldSuppressMemory } from "../shared/safety.js";
+import { tokenize } from "../shared/text.js";
 import type {
   MemoryDeleteResult,
   MemoryPruneResult,
@@ -159,7 +161,7 @@ export async function startRecallHttpBackendServer(params: {
       }
       if (req.method === "GET" && maybeId === "search") {
         const query = url.searchParams.get("q")?.trim().toLowerCase() ?? "";
-        const tokens = query.split(/\s+/).filter(Boolean);
+        const tokens = tokenize(query);
         if (tokens.length === 0) {
           reply(res, 200, records.filter((record) => record.active !== false && !shouldSuppressMemory(record)));
           return;
@@ -204,6 +206,7 @@ export async function startRecallHttpBackendServer(params: {
         }
         const patch = (payload?.patch ?? {}) as Partial<MemoryRecord>;
         Object.assign(record, patch, { id: record.id });
+        record.fingerprint = patch.fingerprint ?? buildMemoryFingerprint(record);
         await writeSpace(filePath, records);
         reply(res, 200, record);
         return;
@@ -256,7 +259,11 @@ function upsertRecords(store: MemoryRecord[], incoming: MemoryRecord[]): MemoryW
   let written = 0;
   let updated = 0;
   let superseded = 0;
-  for (const candidate of incoming) {
+  for (const incomingCandidate of incoming) {
+    const candidate = {
+      ...incomingCandidate,
+      fingerprint: buildMemoryFingerprint(incomingCandidate),
+    };
     const existing = store.find((record) => record.fingerprint === candidate.fingerprint);
     if (existing) {
       Object.assign(existing, mergeRecord(existing, candidate));
@@ -307,6 +314,11 @@ function mergeRecord(previous: MemoryRecord, candidate: MemoryRecord): MemoryRec
     scope: candidate.scope ?? previous.scope,
     scopeKey: candidate.scopeKey ?? previous.scopeKey,
     sensitive: candidate.sensitive ?? previous.sensitive,
+    fingerprint: buildMemoryFingerprint({
+      kind: previous.kind,
+      summary: candidate.summary.length >= previous.summary.length ? candidate.summary : previous.summary,
+      memoryGroup: candidate.memoryGroup ?? previous.memoryGroup,
+    }),
   };
 }
 

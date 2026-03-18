@@ -30,6 +30,12 @@ test("captures open questions as session state instead of stable memory", () => 
   assert.deepEqual(result.statePatch.openQuestions, ["你记得我的偏好吗？"]);
 });
 
+test("extracts question-form preference requests as durable memory", () => {
+  const result = extractor().extract(turn("之后可以用中文回答并且尽量简洁一点吗？"));
+  assert.ok(result.memories.some((memory) => /Chinese responses/i.test(memory.summary)));
+  assert.ok(result.memories.some((memory) => /concise/i.test(memory.summary)));
+});
+
 test("rejects noisy metadata and heartbeat wrappers from memory writes", () => {
   const result = extractor().extract(
     turn('Sender (untrusted metadata): {"label":"openclaw-control-ui","id":"cron:12345678-abcd"} heartbeat'),
