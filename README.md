@@ -33,7 +33,7 @@ OpenClaw Recall is a memory infrastructure plugin for OpenClaw. It solves the pr
 
 ---
 
-## What's New in 1.3.0
+## What's New in 1.3
 
 This release focuses on retrieval quality and import fidelity.
 
