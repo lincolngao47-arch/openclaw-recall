@@ -201,6 +201,7 @@ export class MemoryExtractor {
       fingerprint: buildMemoryFingerprint({
         kind: candidate.kind,
         summary: normalizedSummary,
+        content: candidate.content,
         memoryGroup: candidate.memoryGroup,
       }),
       createdAt: now,
@@ -456,7 +457,11 @@ function extractSemanticCandidates(text: string): CandidateSeed[] {
 }
 
 function hasPreferenceRequestSignal(text: string): boolean {
-  return /以后|从现在开始|默认|请用|用中文|用英文|answer in (?:chinese|english)|reply in (?:chinese|english)|respond in (?:chinese|english)|call me|叫我|prefer|喜欢|不喜欢|希望|简洁|详细|结构化|结论|下一步/i.test(text);
+  return [
+    /(?:以后|之后|从现在开始|默认).*(?:叫我|call me|用中文|用英文|中文回答|英文回答|answer in (?:chinese|english)|reply in (?:chinese|english)|respond in (?:chinese|english)|简洁|详细|结构化|结论|下一步)/i,
+    /(?:请|请你|希望你|麻烦|可以|能不能).*(?:叫我|call me|用中文|用英文|中文回答|英文回答|answer in (?:chinese|english)|reply in (?:chinese|english)|respond in (?:chinese|english)|简洁|详细|结构化|结论|下一步)/i,
+    /(?:叫我|call me|用中文|用英文|中文回答|英文回答|answer in (?:chinese|english)|reply in (?:chinese|english)|respond in (?:chinese|english)|简洁一点|详细一点|结构化).*(?:吗|么|吧|？|\?)$/i,
+  ].some((pattern) => pattern.test(text));
 }
 
 function extractEpisodicCandidates(text: string): CandidateSeed[] {

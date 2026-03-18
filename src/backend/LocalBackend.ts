@@ -100,51 +100,61 @@ export class LocalBackend implements MemoryBackend {
         ...candidate,
         fingerprint: buildMemoryFingerprint(candidate),
       };
-      const existing = this.database.connection
-        .prepare(`SELECT * FROM memories WHERE fingerprint = ?`)
-        .get(normalizedCandidate.fingerprint) as MemoryRow | undefined;
+      const existing = activePool.find((memory) => memory.fingerprint === normalizedCandidate.fingerprint);
 
       if (existing) {
-        const previous = this.fromRow(existing);
-        const merged = await this.mergeMemory(previous, normalizedCandidate);
+        const merged = await this.mergeMemory(existing, normalizedCandidate);
         this.updateById(merged);
-        syncActivePool(activePool, previous.id, merged);
+        syncActivePool(activePool, existing.id, merged);
         updated += 1;
         continue;
       }
 
       const groupRow =
         normalizedCandidate.memoryGroup
-          ? (this.database.connection
-              .prepare(`SELECT * FROM memories WHERE json_extract(meta_json, '$.memoryGroup') = ? ORDER BY created_at DESC LIMIT 1`)
-              .get(normalizedCandidate.memoryGroup) as MemoryRow | undefined)
+          ? activePool.find((memory) => memory.memoryGroup === normalizedCandidate.memoryGroup)
           : undefined;
 
       if (groupRow) {
-        const previous = this.fromRow(groupRow);
-        if (shouldSupersede(previous, normalizedCandidate)) {
+        if (shouldSupersede(groupRow, normalizedCandidate)) {
           const embedding =
             normalizedCandidate.embedding ??
             (await this.embeddings.embed(buildMemoryEmbeddingText(normalizedCandidate)));
           const next = {
             ...normalizedCandidate,
             embedding,
-            version: (previous.version ?? 1) + 1,
-            memoryGroup: normalizedCandidate.memoryGroup ?? previous.memoryGroup,
+            version: (groupRow.version ?? 1) + 1,
+            memoryGroup: normalizedCandidate.memoryGroup ?? groupRow.memoryGroup,
             active: true,
           };
-          this.insert(next);
-          this.markSuperseded(previous.id, next.id);
-          syncActivePool(activePool, previous.id, null);
-          syncActivePool(activePool, next.id, next);
+          const historicalMatch = this.findAnyByFingerprint(next.fingerprint);
+          if (historicalMatch && historicalMatch.id !== groupRow.id) {
+            const revived: MemoryRecord = {
+              ...historicalMatch,
+              ...next,
+              id: historicalMatch.id,
+              createdAt: historicalMatch.createdAt,
+              supersededAt: undefined,
+              supersededBy: undefined,
+            };
+            this.updateById(revived);
+            this.markSuperseded(groupRow.id, revived.id);
+            syncActivePool(activePool, groupRow.id, null);
+            syncActivePool(activePool, revived.id, revived);
+          } else {
+            this.insert(next);
+            this.markSuperseded(groupRow.id, next.id);
+            syncActivePool(activePool, groupRow.id, null);
+            syncActivePool(activePool, next.id, next);
+          }
           written += 1;
           superseded += 1;
           continue;
         }
 
-        const merged = await this.mergeMemory(previous, normalizedCandidate);
+        const merged = await this.mergeMemory(groupRow, normalizedCandidate);
         this.updateById(merged);
-        syncActivePool(activePool, previous.id, merged);
+        syncActivePool(activePool, groupRow.id, merged);
         updated += 1;
         continue;
       }
@@ -295,6 +305,7 @@ export class LocalBackend implements MemoryBackend {
       fingerprint: buildMemoryFingerprint({
         kind: previous.kind,
         summary: preferSummary(previous.summary, candidate.summary),
+        content: preferContent(previous.content, candidate.content),
         memoryGroup: candidate.memoryGroup ?? previous.memoryGroup,
       }),
       version: Math.max(previous.version ?? 1, candidate.version ?? 1),
@@ -354,6 +365,13 @@ export class LocalBackend implements MemoryBackend {
         JSON.stringify(memory.sourceTurnIds),
         JSON.stringify(memory.embedding ?? []),
       );
+  }
+
+  private findAnyByFingerprint(fingerprint: string): MemoryRecord | null {
+    const row = this.database.connection
+      .prepare(`SELECT * FROM memories WHERE fingerprint = ? ORDER BY created_at DESC LIMIT 1`)
+      .get(fingerprint) as MemoryRow | undefined;
+    return row ? this.fromRow(row) : null;
   }
 
   private updateById(memory: MemoryRecord): void {

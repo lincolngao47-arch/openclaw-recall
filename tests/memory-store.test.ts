@@ -305,6 +305,55 @@ test("updateMemory refreshes fingerprint when the summary changes", async () => 
   }
 });
 
+test("does not revive an inactive fingerprint match instead of superseding the current active row", async () => {
+  const tempDir = await createTempDir("openclaw-memory-store-");
+  try {
+    const store = new MemoryStore(
+      new PluginDatabase(path.join(tempDir, "memory.sqlite")),
+      embeddingProvider,
+      0.99,
+    );
+
+    await store.upsertMany([
+      memory({
+        kind: "preference",
+        summary: "User prefers detailed reports.",
+        content: "Please be detailed.",
+        memoryGroup: "preference:detail",
+      }),
+    ]);
+
+    const concise = memory({
+      kind: "preference",
+      summary: "User prefers concise reports.",
+      content: "Please keep reports concise.",
+      memoryGroup: "preference:detail",
+    });
+    await store.upsertMany([concise]);
+
+    const result = await store.upsertMany([
+      memory({
+        kind: "preference",
+        summary: "User prefers detailed reports.",
+        content: "Please be detailed.",
+        memoryGroup: "preference:detail",
+      }),
+    ]);
+
+    const active = await store.listActive();
+    const all = await store.listAll();
+    assert.equal(result.written, 1);
+    assert.equal(result.superseded, 1);
+    assert.equal(active.length, 1);
+    assert.match(active[0].summary, /detailed reports/i);
+    assert.equal(active[0].version, 3);
+    assert.equal(all.length, 2);
+    assert.equal(all.filter((memory) => memory.active === false).length, 1);
+  } finally {
+    await cleanupTempDir(tempDir);
+  }
+});
+
 test("compact preserves superseded memory rows while shrinking stale content", async () => {
   const tempDir = await createTempDir("openclaw-memory-store-");
   try {

@@ -1,14 +1,19 @@
 import type { MemoryRecord } from "../types/domain.js";
 import { fingerprint } from "../shared/text.js";
 
-type FingerprintInput = Pick<MemoryRecord, "kind" | "summary" | "memoryGroup">;
+type FingerprintInput = Pick<MemoryRecord, "kind" | "summary" | "memoryGroup"> & {
+  content?: string;
+};
 type EmbeddingTextInput = Pick<MemoryRecord, "summary" | "content">;
 
 export function buildMemoryFingerprint(memory: FingerprintInput): string {
+  const normalizedSummary = memory.summary.trim().toLowerCase();
+  const normalizedContent = (memory.content ?? "").trim().toLowerCase();
   return fingerprint([
     memory.kind,
     memory.memoryGroup ?? "",
-    memory.summary.trim().toLowerCase(),
+    normalizedSummary,
+    normalizedContent,
   ].join("|"));
 }
 

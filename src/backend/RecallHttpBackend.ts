@@ -264,7 +264,7 @@ function upsertRecords(store: MemoryRecord[], incoming: MemoryRecord[]): MemoryW
       ...incomingCandidate,
       fingerprint: buildMemoryFingerprint(incomingCandidate),
     };
-    const existing = store.find((record) => record.fingerprint === candidate.fingerprint);
+    const existing = store.find((record) => record.active !== false && record.fingerprint === candidate.fingerprint);
     if (existing) {
       Object.assign(existing, mergeRecord(existing, candidate));
       updated += 1;
@@ -317,6 +317,7 @@ function mergeRecord(previous: MemoryRecord, candidate: MemoryRecord): MemoryRec
     fingerprint: buildMemoryFingerprint({
       kind: previous.kind,
       summary: candidate.summary.length >= previous.summary.length ? candidate.summary : previous.summary,
+      content: candidate.content.length >= previous.content.length ? candidate.content : previous.content,
       memoryGroup: candidate.memoryGroup ?? previous.memoryGroup,
     }),
   };

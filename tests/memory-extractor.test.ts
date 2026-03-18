@@ -37,6 +37,12 @@ test("extracts question-form preference requests as durable memory", () => {
   assert.deepEqual(result.statePatch.openQuestions, []);
 });
 
+test("does not misclassify generic preference questions as durable user preferences", () => {
+  const result = extractor().extract(turn("你喜欢什么架构？"));
+  assert.equal(result.memories.length, 0);
+  assert.deepEqual(result.statePatch.openQuestions, ["你喜欢什么架构？"]);
+});
+
 test("rejects noisy metadata and heartbeat wrappers from memory writes", () => {
   const result = extractor().extract(
     turn('Sender (untrusted metadata): {"label":"openclaw-control-ui","id":"cron:12345678-abcd"} heartbeat'),
