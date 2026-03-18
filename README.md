@@ -43,15 +43,6 @@ OpenClaw Recall is a memory infrastructure plugin for OpenClaw. It solves the pr
  </picture>
 </a>
 
-## What's New in 1.3.1
-
-<a href="https://www.star-history.com/?repos=Felix201209%2Fopenclaw-recall&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=Felix201209/openclaw-recall&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=Felix201209/openclaw-recall&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/image?repos=Felix201209/openclaw-recall&type=date&legend=top-left" />
- </picture>
-</a>
 
 ## What's New in 1.3.2
 
